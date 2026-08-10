@@ -1,32 +1,117 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import {
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+type ImageSide = 'front' | 'back';
+
+type SelectedImage = {
+  file: File;
+  previewUrl: string;
+};
+
+type AnalysisResult = {
+  analysis: {
+    confidence: number;
+  };
+
+  identification: {
+    board_type: string;
+    probable_name: string;
+    manufacturer: string;
+    model: string;
+    part_number: string;
+    equipment: string;
+    application: string;
+    confidence: number;
+  };
+
+  engineering: {
+    technology: string;
+    estimated_layers: number;
+    density: string;
+    condition: string;
+    integrity: number;
+  };
+
+  components: {
+    cpu: number;
+    fpga: number;
+    asic: number;
+    bga: number;
+    memory: number;
+    gold_fingers: number;
+    tantalum: number;
+    transformers: number;
+    connectors: number;
+    relays: number;
+    oscillators: number;
+  };
+
+  recycling: {
+    commercial_grade: string;
+    eco_score: number;
+    gold: string;
+    silver: string;
+    palladium: string;
+    copper: string;
+  };
+
+  recommendation: {
+    decision: string;
+    reason: string;
+  };
+};
 
 export default function AnalysisPage() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [frontImage, setFrontImage] = useState<SelectedImage | null>(
+    null,
+  );
+
+  const [backImage, setBackImage] = useState<SelectedImage | null>(
+    null,
+  );
+
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+
+  const resultRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!selectedFile) {
-      setPreviewUrl(null);
+    return () => {
+      if (frontImage) {
+        URL.revokeObjectURL(frontImage.previewUrl);
+      }
+
+      if (backImage) {
+        URL.revokeObjectURL(backImage.previewUrl);
+      }
+    };
+  }, [frontImage, backImage]);
+
+  useEffect(() => {
+    if (!result) {
       return;
     }
 
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreviewUrl(objectUrl);
+    resultRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }, [result]);
 
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [selectedFile]);
-
-  function validateFile(file: File) {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-
-    if (!allowedTypes.includes(file.type)) {
+  function validateFile(file: File): string | null {
+    if (!ALLOWED_TYPES.includes(file.type)) {
       return 'Formato inválido. Use JPG, PNG ou WEBP.';
     }
 
@@ -34,10 +119,13 @@ export default function AnalysisPage() {
       return 'A imagem excede o limite de 10 MB.';
     }
 
-    return '';
+    return null;
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleImageChange(
+    event: ChangeEvent<HTMLInputElement>,
+    side: ImageSide,
+  ) {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -48,38 +136,155 @@ export default function AnalysisPage() {
 
     if (validationError) {
       setError(validationError);
-      setSelectedFile(null);
       event.target.value = '';
       return;
     }
 
+    const previewUrl = URL.createObjectURL(file);
+
+    if (side === 'front') {
+      if (frontImage) {
+        URL.revokeObjectURL(frontImage.previewUrl);
+      }
+
+      setFrontImage({
+        file,
+        previewUrl,
+      });
+    } else {
+      if (backImage) {
+        URL.revokeObjectURL(backImage.previewUrl);
+      }
+
+      setBackImage({
+        file,
+        previewUrl,
+      });
+    }
+
+    setResult(null);
     setError('');
-    setSelectedFile(file);
   }
 
-  function removeFile() {
-    setSelectedFile(null);
+  function removeImage(side: ImageSide) {
+    if (side === 'front') {
+      if (frontImage) {
+        URL.revokeObjectURL(frontImage.previewUrl);
+      }
+
+      setFrontImage(null);
+    } else {
+      if (backImage) {
+        URL.revokeObjectURL(backImage.previewUrl);
+      }
+
+      setBackImage(null);
+    }
+
+    setResult(null);
+    setError('');
+  }
+
+  function resetAnalysis() {
+    if (frontImage) {
+      URL.revokeObjectURL(frontImage.previewUrl);
+    }
+
+    if (backImage) {
+      URL.revokeObjectURL(backImage.previewUrl);
+    }
+
+    setFrontImage(null);
+    setBackImage(null);
+    setResult(null);
     setError('');
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!selectedFile) {
-      setError('Selecione uma imagem da placa antes de continuar.');
+    if (!frontImage) {
+      setError('Envie a fotografia da frente da placa.');
+      return;
+    }
+
+    if (!backImage) {
+      setError('Envie a fotografia do verso da placa.');
       return;
     }
 
     setError('');
+    setResult(null);
     setIsSubmitting(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      alert('Imagem validada. A integração com a IA será adicionada na próxima etapa.');
+      const formData = new FormData(event.currentTarget);
+
+      formData.set('frontImage', frontImage.file);
+      formData.set('backImage', backImage.file);
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const responseText = await response.text();
+
+let apiResult: {
+  success?: boolean;
+  data?: AnalysisResult;
+  error?: string;
+};
+
+try {
+  apiResult = JSON.parse(responseText);
+} catch {
+  console.error('Resposta não JSON da API:', responseText);
+
+  throw new Error(
+    `A rota de análise retornou uma página de erro do servidor. Status: ${response.status}. Verifique o terminal do StackBlitz.`,
+  );
+}
+
+if (!response.ok || !apiResult.success) {
+  throw new Error(
+    apiResult.error || 'Não foi possível analisar a placa.',
+  );
+}
+
+if (!apiResult.data) {
+  throw new Error('A API não retornou o laudo da placa.');
+}
+
+setResult(apiResult.data);
+
+      if (!response.ok || !apiResult.success) {
+        throw new Error(
+          apiResult.error || 'Não foi possível analisar a placa.',
+        );
+      }
+
+      if (!apiResult.data) {
+        throw new Error('A API não retornou o laudo da placa.');
+      }
+
+      setResult(apiResult.data as AnalysisResult);
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : 'Erro inesperado durante a análise.';
+
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const canSubmit =
+    Boolean(frontImage) &&
+    Boolean(backImage) &&
+    !isSubmitting;
 
   return (
     <main className="min-h-screen bg-[#07110d] text-white">
@@ -105,8 +310,9 @@ export default function AnalysisPage() {
               <p className="text-sm font-semibold tracking-[0.18em]">
                 ECOBOARD
               </p>
+
               <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-400">
-                Intelligence
+                Recycling Intelligence
               </p>
             </div>
           </Link>
@@ -120,114 +326,53 @@ export default function AnalysisPage() {
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-16 lg:px-8 lg:py-24">
-        <div className="mb-12">
+      <section className="mx-auto max-w-6xl px-6 py-14 lg:px-8 lg:py-20">
+        <div className="mb-10">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
-            Vision AI
+            Nova avaliação de sucata
           </p>
 
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] sm:text-5xl">
-            Nova análise de placa
+            Identificação técnica da PCB
           </h1>
 
-          <p className="mt-5 max-w-2xl text-sm leading-7 text-white/45">
-            Envie uma imagem nítida da placa eletrônica. Para melhorar a
-            classificação, informe também o peso e a origem do equipamento.
+          <p className="mt-5 max-w-3xl text-sm leading-7 text-white/45">
+            Envie fotografias nítidas da frente e do verso da mesma
+            placa. A EcoBoard tentará identificar o tipo, fabricante,
+            modelo, função, características, componentes e potencial
+            para reciclagem.
           </p>
         </div>
 
         <form className="grid gap-6" onSubmit={handleSubmit}>
-          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-            {!previewUrl ? (
-              <div className="flex min-h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.025] px-6 text-center transition hover:border-emerald-400/60">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-7 w-7 text-emerald-400"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    aria-hidden="true"
-                  >
-                    <path d="M12 16V4" />
-                    <path d="m7 9 5-5 5 5" />
-                    <path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
-                  </svg>
-                </div>
+          <section className="grid gap-6 lg:grid-cols-2">
+            <ImageUploadCard
+              title="Frente da placa"
+              description="Fotografe toda a face principal, incluindo componentes, etiquetas e inscrições."
+              image={frontImage}
+              side="front"
+              onChange={handleImageChange}
+              onRemove={removeImage}
+            />
 
-                <h2 className="mt-5 text-xl font-semibold">
-                  Envie a fotografia da PCB
-                </h2>
-
-                <p className="mt-3 max-w-md text-sm leading-6 text-white/40">
-                  Selecione uma imagem nítida da parte frontal da placa.
-                </p>
-
-                <label className="mt-6 cursor-pointer rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
-                  Selecionar imagem
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                </label>
-
-                <p className="mt-4 text-xs text-white/25">
-                  JPG, PNG ou WEBP. Limite: 10 MB.
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-                <div className="relative min-h-96 bg-black/30">
-                  <img
-                    src={previewUrl}
-                    alt="Pré-visualização da placa eletrônica"
-                    className="h-full max-h-[560px] w-full object-contain"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-4 border-t border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {selectedFile?.name}
-                    </p>
-                    <p className="mt-1 text-xs text-white/35">
-                      {selectedFile
-                        ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB`
-                        : ''}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <label className="cursor-pointer rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold text-white/60 transition hover:border-white/20 hover:text-white">
-                      Trocar imagem
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
-                    </label>
-
-                    <button
-                      type="button"
-                      onClick={removeFile}
-                      className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-400/10"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300">
-                {error}
-              </div>
-            )}
+            <ImageUploadCard
+              title="Verso da placa"
+              description="Fotografe toda a face traseira, incluindo trilhas, códigos e contatos."
+              image={backImage}
+              side="back"
+              onChange={handleImageChange}
+              onRemove={removeImage}
+            />
           </section>
+
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300"
+            >
+              {error}
+            </div>
+          )}
 
           <section className="grid gap-5 rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:grid-cols-2 sm:p-8">
             <div>
@@ -245,9 +390,11 @@ export default function AnalysisPage() {
                   type="number"
                   min="0"
                   step="0.001"
+                  inputMode="decimal"
                   placeholder="0,000"
                   className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/20"
                 />
+
                 <span className="flex items-center border-l border-white/10 px-4 text-sm text-white/35">
                   kg
                 </span>
@@ -268,7 +415,7 @@ export default function AnalysisPage() {
                 type="number"
                 min="1"
                 defaultValue="1"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none transition focus:border-emerald-400/50"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none focus:border-emerald-400/50"
               />
             </div>
 
@@ -284,20 +431,51 @@ export default function AnalysisPage() {
                 id="origin"
                 name="origin"
                 defaultValue=""
-                className="mt-2 w-full rounded-xl border border-white/10 bg-[#0b1711] px-4 py-3.5 text-sm text-white outline-none transition focus:border-emerald-400/50"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-[#0b1711] px-4 py-3.5 text-sm text-white outline-none focus:border-emerald-400/50"
               >
                 <option value="" disabled>
                   Selecione uma origem
                 </option>
-                <option value="desktop">Computador desktop</option>
-                <option value="laptop">Notebook</option>
-                <option value="server">Servidor</option>
-                <option value="smartphone">Smartphone</option>
-                <option value="telecom">Equipamento de telecom</option>
-                <option value="tv">TV ou monitor</option>
-                <option value="industrial">Equipamento industrial</option>
-                <option value="appliance">Eletrodoméstico</option>
-                <option value="unknown">Origem desconhecida</option>
+
+                <option value="telecom">
+                  Telecomunicações
+                </option>
+
+                <option value="server">
+                  Servidor
+                </option>
+
+                <option value="industrial">
+                  Equipamento industrial
+                </option>
+
+                <option value="medical">
+                  Equipamento médico
+                </option>
+
+                <option value="desktop">
+                  Computador desktop
+                </option>
+
+                <option value="laptop">
+                  Notebook
+                </option>
+
+                <option value="automotive">
+                  Equipamento automotivo
+                </option>
+
+                <option value="tv">
+                  TV ou monitor
+                </option>
+
+                <option value="appliance">
+                  Eletrodoméstico
+                </option>
+
+                <option value="unknown">
+                  Origem desconhecida
+                </option>
               </select>
             </div>
 
@@ -306,15 +484,15 @@ export default function AnalysisPage() {
                 htmlFor="reference"
                 className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
               >
-                Referência ou modelo
+                Código, modelo ou referência
               </label>
 
               <input
                 id="reference"
                 name="reference"
                 type="text"
-                placeholder="Ex.: Dell PowerEdge R740"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-emerald-400/50"
+                placeholder="Ex.: WS-X6748, PCA-12345, REV B"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/20 focus:border-emerald-400/50"
               />
             </div>
 
@@ -330,8 +508,8 @@ export default function AnalysisPage() {
                 id="notes"
                 name="notes"
                 rows={4}
-                placeholder="Informe danos, ausência de componentes, oxidação ou outras características relevantes."
-                className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-white/20 focus:border-emerald-400/50"
+                placeholder="Informe procedência, danos, componentes removidos ou outras informações relevantes."
+                className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm leading-6 text-white outline-none placeholder:text-white/20 focus:border-emerald-400/50"
               />
             </div>
           </section>
@@ -346,14 +524,375 @@ export default function AnalysisPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="inline-flex items-center justify-center rounded-xl bg-emerald-400 px-7 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!canSubmit}
+              className="inline-flex items-center justify-center rounded-xl bg-emerald-400 px-7 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? 'Validando imagem...' : 'Analisar placa'}
+              {isSubmitting
+                ? 'Analisando frente e verso...'
+                : 'Analisar placa'}
             </button>
           </div>
         </form>
+
+        {result && (
+          <div ref={resultRef} className="scroll-mt-8 pt-10">
+            <AnalysisReport
+              result={result}
+              frontPreview={frontImage?.previewUrl ?? ''}
+              backPreview={backImage?.previewUrl ?? ''}
+              onReset={resetAnalysis}
+            />
+          </div>
+        )}
       </section>
     </main>
   );
+}
+
+type ImageUploadCardProps = {
+  title: string;
+  description: string;
+  image: SelectedImage | null;
+  side: ImageSide;
+  onChange: (
+    event: ChangeEvent<HTMLInputElement>,
+    side: ImageSide,
+  ) => void;
+  onRemove: (side: ImageSide) => void;
+};
+
+function ImageUploadCard({
+  title,
+  description,
+  image,
+  side,
+  onChange,
+  onRemove,
+}: ImageUploadCardProps) {
+  return (
+    <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+      <div className="mb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400">
+          Obrigatória
+        </p>
+
+        <h2 className="mt-2 text-xl font-semibold">
+          {title}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-white/40">
+          {description}
+        </p>
+      </div>
+
+      {!image ? (
+        <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.025] px-5 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10 text-2xl text-emerald-300">
+            +
+          </div>
+
+          <label className="mt-5 cursor-pointer rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
+            Selecionar imagem
+
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={(event) => onChange(event, side)}
+            />
+          </label>
+
+          <p className="mt-4 text-xs text-white/25">
+            JPG, PNG ou WEBP. Limite: 10 MB.
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+          <div className="flex min-h-72 items-center justify-center bg-black/30">
+            <img
+              src={image.previewUrl}
+              alt={title}
+              className="max-h-[420px] w-full object-contain"
+            />
+          </div>
+
+          <div className="border-t border-white/10 p-4">
+            <p className="truncate text-sm font-medium">
+              {image.file.name}
+            </p>
+
+            <p className="mt-1 text-xs text-white/35">
+              {(image.file.size / 1024 / 1024).toFixed(2)} MB
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <label className="cursor-pointer rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold text-white/60 hover:text-white">
+                Trocar
+
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => onChange(event, side)}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => onRemove(side)}
+                className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-xs font-semibold text-red-300"
+              >
+                Remover
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type AnalysisReportProps = {
+  result: AnalysisResult;
+  frontPreview: string;
+  backPreview: string;
+  onReset: () => void;
+};
+
+function AnalysisReport({
+  result,
+  frontPreview,
+  backPreview,
+  onReset,
+}: AnalysisReportProps) {
+  const components = [
+    ['CPU', result.components.cpu],
+    ['FPGA', result.components.fpga],
+    ['ASIC', result.components.asic],
+    ['BGA', result.components.bga],
+    ['Memórias', result.components.memory],
+    ['Gold Fingers', result.components.gold_fingers],
+    ['Tântalo', result.components.tantalum],
+    ['Transformadores', result.components.transformers],
+    ['Conectores', result.components.connectors],
+    ['Relés', result.components.relays],
+    ['Osciladores', result.components.oscillators],
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-emerald-400/20 bg-white/[0.035]">
+      <div className="border-b border-white/10 px-6 py-6 sm:px-8">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
+          Laudo técnico-comercial
+        </p>
+
+        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-3xl font-semibold">
+              {result.identification.probable_name}
+            </h2>
+
+            <p className="mt-2 text-sm text-white/45">
+              {result.identification.board_type}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-5 py-3">
+            <p className="text-xs uppercase tracking-[0.14em] text-emerald-300/70">
+              EcoScore
+            </p>
+
+            <p className="mt-1 text-3xl font-semibold text-emerald-300">
+              {result.recycling.eco_score}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 border-b border-white/10 p-6 sm:grid-cols-2 sm:p-8">
+        <img
+          src={frontPreview}
+          alt="Frente analisada"
+          className="h-72 w-full rounded-2xl border border-white/10 bg-black/20 object-contain"
+        />
+
+        <img
+          src={backPreview}
+          alt="Verso analisado"
+          className="h-72 w-full rounded-2xl border border-white/10 bg-black/20 object-contain"
+        />
+      </div>
+
+      <ReportSection title="Identificação">
+        <ReportGrid
+          items={[
+            ['Tipo', result.identification.board_type],
+            ['Nome provável', result.identification.probable_name],
+            ['Fabricante', result.identification.manufacturer],
+            ['Modelo', result.identification.model],
+            ['Part number', result.identification.part_number],
+            ['Equipamento', result.identification.equipment],
+            ['Função', result.identification.application],
+            [
+              'Confiança',
+              formatPercentage(result.identification.confidence),
+            ],
+          ]}
+        />
+      </ReportSection>
+
+      <ReportSection title="Características técnicas">
+        <ReportGrid
+          items={[
+            ['Tecnologia', result.engineering.technology],
+            [
+              'Camadas estimadas',
+              String(result.engineering.estimated_layers),
+            ],
+            ['Densidade', result.engineering.density],
+            ['Condição', result.engineering.condition],
+            [
+              'Integridade',
+              formatPercentage(result.engineering.integrity),
+            ],
+          ]}
+        />
+      </ReportSection>
+
+      <ReportSection title="Componentes relevantes">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {components.map(([label, value]) => (
+            <div
+              key={String(label)}
+              className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3"
+            >
+              <span className="text-sm text-white/50">
+                {label}
+              </span>
+
+              <span className="text-lg font-semibold text-emerald-300">
+                {value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </ReportSection>
+
+      <ReportSection title="Potencial para reciclagem">
+        <ReportGrid
+          items={[
+            [
+              'Classe comercial',
+              result.recycling.commercial_grade,
+            ],
+            ['Ouro', formatPotential(result.recycling.gold)],
+            ['Prata', formatPotential(result.recycling.silver)],
+            [
+              'Paládio',
+              formatPotential(result.recycling.palladium),
+            ],
+            ['Cobre', formatPotential(result.recycling.copper)],
+            [
+              'Confiança geral',
+              formatPercentage(result.analysis.confidence),
+            ],
+          ]}
+        />
+      </ReportSection>
+
+      <ReportSection title="Parecer da EcoBoard">
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">
+            {formatDecision(result.recommendation.decision)}
+          </p>
+
+          <p className="mt-4 text-sm leading-7 text-white/60">
+            {result.recommendation.reason}
+          </p>
+        </div>
+      </ReportSection>
+
+      <div className="flex justify-end border-t border-white/10 p-6 sm:p-8">
+        <button
+          type="button"
+          onClick={onReset}
+          className="rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-[#07110d] hover:bg-emerald-300"
+        >
+          Analisar outra placa
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ReportSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-b border-white/10 p-6 sm:p-8">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/40">
+        {title}
+      </h3>
+
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function ReportGrid({
+  items,
+}: {
+  items: Array<[string, string]>;
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map(([label, value]) => (
+        <div
+          key={label}
+          className="rounded-2xl border border-white/10 bg-black/20 p-4"
+        >
+          <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+            {label}
+          </p>
+
+          <p className="mt-2 break-words text-base font-semibold">
+            {value || 'Não identificado'}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatPercentage(value: number): string {
+  const percentage = value <= 1 ? value * 100 : value;
+  const safeValue = Math.max(0, Math.min(percentage, 100));
+
+  return `${Math.round(safeValue)}%`;
+}
+
+function formatPotential(value: string): string {
+  const values: Record<string, string> = {
+    VERY_LOW: 'Muito baixo',
+    LOW: 'Baixo',
+    MEDIUM: 'Médio',
+    HIGH: 'Alto',
+    VERY_HIGH: 'Muito alto',
+  };
+
+  return values[value] ?? value;
+}
+
+function formatDecision(value: string): string {
+  const values: Record<string, string> = {
+    BUY: 'Compra recomendada',
+    NEGOTIATE: 'Negociar',
+    DO_NOT_BUY: 'Compra não recomendada',
+  };
+
+  return values[value] ?? value;
 }
