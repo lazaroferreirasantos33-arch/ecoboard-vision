@@ -21,6 +21,12 @@ type AnalyzePCBInput = {
   context?: PCBAnalysisContext;
 };
 
+const PRIMARY_MODEL = 'gemini-3.7-flash';
+const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+
+const PRIMARY_TIMEOUT_MS = 8000;
+const FALLBACK_TIMEOUT_MS = 12000;
+
 export async function analyzePCB({
   frontImage,
   backImage,
@@ -30,7 +36,7 @@ export async function analyzePCB({
 
   if (!apiKey) {
     throw new Error(
-      'GEMINI_API_KEY não encontrada. Verifique o arquivo .env.',
+      'GEMINI_API_KEY não encontrada. Verifique as variáveis de ambiente.',
     );
   }
 
@@ -39,11 +45,9 @@ export async function analyzePCB({
   });
 
   const contextText = buildContextText(context);
+  const totalStart = performance.now();
 
-  const geminiStart = performance.now();
-
-  const requestConfig = {
-  contents: [
+  const contents = [
     {
       role: 'user',
       parts: [
@@ -57,7 +61,7 @@ Imagem 2: verso da mesma placa.
 Analise as duas imagens em conjunto.
 
 Objetivo principal:
-identificar tecnicamente a placa e classificá-la para venda como sucata eletrônica.
+identificar tecnicamente a placa e classificá-la para reciclagem e comercialização como sucata eletrônica.
 
 Prioridades da análise:
 1. determinar o tipo da placa;
@@ -75,9 +79,9 @@ Regras:
 - não invente fabricante, modelo ou part number;
 - quando uma informação não puder ser confirmada, use "não identificado";
 - diferencie informação observada de identificação provável;
-- use frente e verso como uma única análise;
+- analise frente e verso como partes da mesma PCB;
 - pense exclusivamente em reciclagem e comercialização de sucata eletrônica;
-- não calcule preços nesta etapa;
+- não calcule preços;
 - não forneça gramas exatas de metais;
 - retorne somente os campos previstos no schema.
 
@@ -98,84 +102,108 @@ ${contextText}
         },
       ],
     },
-  ],
+  ];
 
-  config: {
+  const baseConfig = {
     systemInstruction: PCB_SYSTEM_PROMPT,
     responseMimeType: 'application/json',
-    ...(USE_SCHEMA_BENCHMARK
-      ? { responseSchema: PCB_ANALYSIS_SCHEMA, }
-      : {}),
+    responseSchema: PCB_ANALYSIS_SCHEMA,
     thinkingConfig: {
-      thinkingLevel: 'low',
+      thinkingLevel: 'low' as const,
     },
-  },
-};
+  };
 
-let response;
-
-try {
-  const primaryStart = performance.now();
+  let response;
 
   try {
-    response = await ai.models.generateContent({
-        model: 'gemini-3.7-flash',
-        ...requestConfig,
-      
+    const primaryStart = performance.now();
+
+    try {
+      response = await ai.models.generateContent({
+        model: PRIMARY_MODEL,
+        contents,
         config: {
-          ...requestConfig.config,
-      
+          ...baseConfig,
           httpOptions: {
-            timeout: 8000,
+            timeout: PRIMARY_TIMEOUT_MS,
           },
         },
       });
 
-    console.log(
-      'ECOBOARD_PRIMARY_TIME:',
-      `${((performance.now() - primaryStart) / 1000).toFixed(2)}s`,
-    );
-  } catch (error) {
+      console.log(
+        'ECOBOARD_PRIMARY_TIME:',
+        `${secondsSince(primaryStart)}s`,
+      );
+    } catch (primaryError) {
+      console.warn(
+        'ECOBOARD_PRIMARY_FAILED_TIME:',
+        `${secondsSince(primaryStart)}s`,
+      );
+
+      throw primaryError;
+    }
+  } catch (primaryError) {
+    if (!isTemporaryGeminiError(primaryError)) {
+      console.error(
+        'ECOBOARD_PRIMARY_ERROR:',
+        primaryError,
+      );
+
+      throw primaryError;
+    }
+
     console.warn(
-      'ECOBOARD_PRIMARY_FAILED_TIME:',
-      `${((performance.now() - primaryStart) / 1000).toFixed(2)}s`,
+      'ECOBOARD_GEMINI_FALLBACK:',
+      `${PRIMARY_MODEL} indisponível ou lento. Usando ${FALLBACK_MODEL}.`,
     );
 
-    throw error;
+    const fallbackStart = performance.now();
+
+    try {
+      response = await ai.models.generateContent({
+        model: FALLBACK_MODEL,
+        contents,
+        config: {
+          ...baseConfig,
+          httpOptions: {
+            timeout: FALLBACK_TIMEOUT_MS,
+          },
+        },
+      });
+
+      console.log(
+        'ECOBOARD_FALLBACK_TIME:',
+        `${secondsSince(fallbackStart)}s`,
+      );
+    } catch (fallbackError) {
+      console.error(
+        'ECOBOARD_FALLBACK_FAILED_TIME:',
+        `${secondsSince(fallbackStart)}s`,
+      );
+
+      console.error(
+        'ECOBOARD_FALLBACK_ERROR:',
+        fallbackError,
+      );
+
+      if (isTemporaryGeminiError(fallbackError)) {
+        throw new Error(
+          'O serviço de análise está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente.',
+        );
+      }
+
+      throw fallbackError;
+    }
   }
-} catch (error) {
-  if (!isTemporaryGeminiError(error)) {
-    throw error;
-  }
-
-  console.warn(
-    'ECOBOARD_GEMINI_FALLBACK:',
-    'Gemini 3.7 Flash indisponível. Usando Gemini 3.5 Flash-Lite.',
-  );
-
-  const fallbackStart = performance.now();
-
-  response = await ai.models.generateContent({
-    model: 'gemini-3.5-flash-lite',
-    ...requestConfig,
-  });
-
-  console.log(
-    'ECOBOARD_FALLBACK_TIME:',
-    `${((performance.now() - fallbackStart) / 1000).toFixed(2)}s`,
-  );
-}
-
-  const geminiEnd = performance.now();
 
   console.log(
     'ECOBOARD_GEMINI_TIME:',
-    `${((geminiEnd - geminiStart) / 1000).toFixed(2)}s`,
+    `${secondsSince(totalStart)}s`,
   );
 
-  if (!response.text) {
+  if (!response?.text) {
     throw new Error(
-      'O Gemini não retornou conteúdo para as imagens enviadas.',
+      'A inteligência artificial não retornou conteúdo para as imagens enviadas.',
     );
   }
 
@@ -205,7 +233,7 @@ function buildContextText(
     context.notes
       ? `Observações do usuário: ${context.notes}`
       : null,
-  ].filter(Boolean);
+  ].filter((value): value is string => Boolean(value));
 
   if (values.length === 0) {
     return 'Nenhum contexto adicional foi informado pelo usuário.';
@@ -217,23 +245,34 @@ ${values.map((value) => `- ${value}`).join('\n')}
   `.trim();
 }
 
-function isTemporaryGeminiError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-  
-    const message = error.message.toLowerCase();
-  
-    return (
-      message.includes('503') ||
-      message.includes('unavailable') ||
-      message.includes('high demand') ||
-      message.includes('overloaded') ||
-      message.includes('timeout') ||
-      message.includes('timed out') ||
-      message.includes('deadline') ||
-      message.includes('aborted') ||
-      error.name === 'AbortError'
-    );
+function isTemporaryGeminiError(
+  error: unknown,
+): boolean {
+  if (!(error instanceof Error)) {
+    return false;
   }
-  
+
+  const message = error.message.toLowerCase();
+
+  return (
+    error.name === 'AbortError' ||
+    message.includes('503') ||
+    message.includes('unavailable') ||
+    message.includes('high demand') ||
+    message.includes('overloaded') ||
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('deadline') ||
+    message.includes('aborted') ||
+    message.includes('operation was aborted')
+  );
+}
+
+function secondsSince(
+  start: number,
+): string {
+  return (
+    (performance.now() - start) /
+    1000
+  ).toFixed(2);
+}
