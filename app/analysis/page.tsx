@@ -443,8 +443,8 @@ console.log(
               </p>
 
               <p className="text-[10px] uppercase tracking-[0.28em] text-emerald-400">
-                Recycling Intelligence
-              </p>
+  Inteligência em Reciclagem
+</p>
             </div>
           </Link>
 
