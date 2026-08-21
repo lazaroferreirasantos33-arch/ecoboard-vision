@@ -24,8 +24,8 @@ type AnalyzePCBInput = {
 const PRIMARY_MODEL = 'gemini-3.7-flash';
 const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
 
-const PRIMARY_TIMEOUT_MS = 8000;
-const FALLBACK_TIMEOUT_MS = 12000;
+const PRIMARY_TIMEOUT_MS = 15000;
+const FALLBACK_TIMEOUT_MS = 45000;
 
 export async function analyzePCB({
   frontImage,
@@ -116,69 +116,44 @@ ${contextText}
   let response;
 
   try {
-    const primaryStart = performance.now();
-
-    try {
-      response = await ai.models.generateContent({
-        model: PRIMARY_MODEL,
-        contents,
-        config: {
-          ...baseConfig,
-          httpOptions: {
-            timeout: PRIMARY_TIMEOUT_MS,
-          },
-        },
-      });
-
-      console.log(
-        'ECOBOARD_PRIMARY_TIME:',
-        `${secondsSince(primaryStart)}s`,
-      );
-    } catch (primaryError) {
-      console.warn(
-        'ECOBOARD_PRIMARY_FAILED_TIME:',
-        `${secondsSince(primaryStart)}s`,
-      );
-
-      throw primaryError;
-    }
+    response = await runPrimaryModel(
+      ai,
+      contents,
+      baseConfig,
+    );
   } catch (primaryError) {
-    if (!isTemporaryGeminiError(primaryError)) {
+    const primaryKind = classifyGeminiError(
+      primaryError,
+    );
+
+    if (
+      primaryKind !== 'temporary' &&
+      primaryKind !== 'quota'
+    ) {
       console.error(
         'ECOBOARD_PRIMARY_ERROR:',
         primaryError,
       );
 
-      throw primaryError;
+      throw new Error(
+        'Não foi possível concluir a análise desta placa. Tente novamente.',
+      );
     }
 
     console.warn(
       'ECOBOARD_GEMINI_FALLBACK:',
-      `${PRIMARY_MODEL} indisponível ou lento. Usando ${FALLBACK_MODEL}.`,
+      `${PRIMARY_MODEL} indisponível. Tentando ${FALLBACK_MODEL}.`,
     );
 
-    const fallbackStart = performance.now();
-
     try {
-      response = await ai.models.generateContent({
-        model: FALLBACK_MODEL,
+      response = await runFallbackModel(
+        ai,
         contents,
-        config: {
-          ...baseConfig,
-          httpOptions: {
-            timeout: FALLBACK_TIMEOUT_MS,
-          },
-        },
-      });
-
-      console.log(
-        'ECOBOARD_FALLBACK_TIME:',
-        `${secondsSince(fallbackStart)}s`,
+        baseConfig,
       );
     } catch (fallbackError) {
-      console.error(
-        'ECOBOARD_FALLBACK_FAILED_TIME:',
-        `${secondsSince(fallbackStart)}s`,
+      const fallbackKind = classifyGeminiError(
+        fallbackError,
       );
 
       console.error(
@@ -186,13 +161,30 @@ ${contextText}
         fallbackError,
       );
 
-      if (isTemporaryGeminiError(fallbackError)) {
+      if (
+        primaryKind === 'quota' &&
+        fallbackKind === 'quota'
+      ) {
         throw new Error(
-          'O serviço de análise está temporariamente sobrecarregado. Aguarde alguns segundos e tente novamente.',
+          'O limite de análises disponível no momento foi atingido. Tente novamente mais tarde.',
         );
       }
 
-      throw fallbackError;
+      if (fallbackKind === 'quota') {
+        throw new Error(
+          'O serviço atingiu o limite de análises disponível no momento. Tente novamente mais tarde.',
+        );
+      }
+
+      if (fallbackKind === 'temporary') {
+        throw new Error(
+          'O serviço de análise está temporariamente indisponível ou sobrecarregado. Aguarde alguns segundos e tente novamente.',
+        );
+      }
+
+      throw new Error(
+        'Não foi possível concluir a análise desta placa. Tente novamente.',
+      );
     }
   }
 
@@ -208,6 +200,86 @@ ${contextText}
   }
 
   return response.text;
+}
+
+async function runPrimaryModel(
+  ai: GoogleGenAI,
+  contents: Parameters<
+    GoogleGenAI['models']['generateContent']
+  >[0]['contents'],
+  baseConfig: Parameters<
+    GoogleGenAI['models']['generateContent']
+  >[0]['config'],
+) {
+  const primaryStart = performance.now();
+
+  try {
+    const response =
+      await ai.models.generateContent({
+        model: PRIMARY_MODEL,
+        contents,
+        config: {
+          ...baseConfig,
+          httpOptions: {
+            timeout: PRIMARY_TIMEOUT_MS,
+          },
+        },
+      });
+
+    console.log(
+      'ECOBOARD_PRIMARY_TIME:',
+      `${secondsSince(primaryStart)}s`,
+    );
+
+    return response;
+  } catch (error) {
+    console.warn(
+      'ECOBOARD_PRIMARY_FAILED_TIME:',
+      `${secondsSince(primaryStart)}s`,
+    );
+
+    throw error;
+  }
+}
+
+async function runFallbackModel(
+  ai: GoogleGenAI,
+  contents: Parameters<
+    GoogleGenAI['models']['generateContent']
+  >[0]['contents'],
+  baseConfig: Parameters<
+    GoogleGenAI['models']['generateContent']
+  >[0]['config'],
+) {
+  const fallbackStart = performance.now();
+
+  try {
+    const response =
+      await ai.models.generateContent({
+        model: FALLBACK_MODEL,
+        contents,
+        config: {
+          ...baseConfig,
+          httpOptions: {
+            timeout: FALLBACK_TIMEOUT_MS,
+          },
+        },
+      });
+
+    console.log(
+      'ECOBOARD_FALLBACK_TIME:',
+      `${secondsSince(fallbackStart)}s`,
+    );
+
+    return response;
+  } catch (error) {
+    console.error(
+      'ECOBOARD_FALLBACK_FAILED_TIME:',
+      `${secondsSince(fallbackStart)}s`,
+    );
+
+    throw error;
+  }
 }
 
 function buildContextText(
@@ -245,16 +317,31 @@ ${values.map((value) => `- ${value}`).join('\n')}
   `.trim();
 }
 
-function isTemporaryGeminiError(
+type GeminiErrorKind =
+  | 'quota'
+  | 'temporary'
+  | 'other';
+
+function classifyGeminiError(
   error: unknown,
-): boolean {
+): GeminiErrorKind {
   if (!(error instanceof Error)) {
-    return false;
+    return 'other';
   }
 
   const message = error.message.toLowerCase();
 
-  return (
+  if (
+    message.includes('429') ||
+    message.includes('resource_exhausted') ||
+    message.includes('quota exceeded') ||
+    message.includes('rate limit') ||
+    message.includes('generate_content_free_tier_requests')
+  ) {
+    return 'quota';
+  }
+
+  if (
     error.name === 'AbortError' ||
     message.includes('503') ||
     message.includes('unavailable') ||
@@ -265,7 +352,11 @@ function isTemporaryGeminiError(
     message.includes('deadline') ||
     message.includes('aborted') ||
     message.includes('operation was aborted')
-  );
+  ) {
+    return 'temporary';
+  }
+
+  return 'other';
 }
 
 function secondsSince(

@@ -1,6 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { calculateEcoScore } from '@/src/ecoboard/ecoscore';
+import { mapBoardTypeToFamily } from '@/src/ecoboard/family-mapper';
+import {
+  formatBenchmarkStatus,
+  validateEcoScoreBenchmark,
+} from '@/src/ecoboard/benchmark';
 import {
   ChangeEvent,
   FormEvent,
@@ -377,7 +383,9 @@ if (!response.ok || !apiResult.success) {
 }
 
 if (!apiResult.data) {
-  throw new Error('A API não retornou o laudo da placa.');
+  throw new Error(
+    'A API não retornou o laudo da placa.',
+  );
 }
 
 setResult(apiResult.data);
@@ -388,18 +396,6 @@ console.log(
   'Tempo total:',
   `${((totalEnd - totalStart) / 1000).toFixed(2)}s`,
 );
-
-      if (!response.ok || !apiResult.success) {
-        throw new Error(
-          apiResult.error || 'Não foi possível analisar a placa.',
-        );
-      }
-
-      if (!apiResult.data) {
-        throw new Error('A API não retornou o laudo da placa.');
-      }
-
-      setResult(apiResult.data as AnalysisResult);
     } catch (requestError) {
       const message =
         requestError instanceof Error
@@ -505,15 +501,91 @@ console.log(
             </div>
           )}
 
+{isSubmitting && (
+  <section className="overflow-hidden rounded-3xl border border-emerald-400/20 bg-emerald-400/[0.035]">
+    <div className="flex flex-col items-center px-6 py-10 text-center sm:px-10 sm:py-12">
+      <div className="relative flex h-16 w-16 items-center justify-center">
+        <div className="absolute inset-0 animate-ping rounded-full border border-emerald-400/20" />
+
+        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-emerald-400/30 bg-emerald-400/10">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-7 w-7 animate-pulse text-emerald-400"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            aria-hidden="true"
+          >
+            <path d="M8 3v4M16 3v4M8 17v4M16 17v4M3 8h4M17 8h4M3 16h4M17 16h4" />
+            <rect
+              x="7"
+              y="7"
+              width="10"
+              height="10"
+              rx="2"
+            />
+            <path d="M10 10h4v4h-4z" />
+          </svg>
+        </div>
+      </div>
+
+      <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-400">
+        EcoBoard Intelligence
+      </p>
+
+      <h2 className="mt-3 text-2xl font-semibold">
+        Analisando sua PCB
+      </h2>
+
+      <p className="mt-3 max-w-xl text-sm leading-7 text-white/45">
+        A EcoBoard está processando as imagens da frente e do verso
+        para gerar uma leitura técnica estruturada da placa.
+      </p>
+
+      <div className="mt-8 grid w-full max-w-2xl gap-3 text-left sm:grid-cols-2">
+        <ProcessingStep
+          title="Frente e verso"
+          description="Preparando as imagens da PCB"
+        />
+
+        <ProcessingStep
+          title="Identificação técnica"
+          description="Buscando tipo, fabricante e modelo"
+        />
+
+        <ProcessingStep
+          title="Componentes"
+          description="Analisando elementos relevantes"
+        />
+
+        <ProcessingStep
+          title="Reciclagem"
+          description="Gerando classificação e parecer"
+        />
+      </div>
+
+      <div className="mt-8 flex items-center gap-2 text-xs text-white/35">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+        Isso pode levar alguns segundos
+      </div>
+    </div>
+  </section>
+)}
+
 <div className="flex justify-end">
   <button
     type="submit"
     disabled={!canSubmit}
-    className="inline-flex w-full items-center justify-center rounded-xl bg-emerald-400 px-7 py-4 text-base font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-56"
+    className="inline-flex w-full items-center justify-center gap-3 rounded-xl bg-emerald-400 px-7 py-4 text-base font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-56"
   >
-    {isSubmitting
-      ? 'Analisando PCB...'
-      : 'Analisar PCB'}
+    {isSubmitting ? (
+      <>
+        <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#07110d]/30 border-t-[#07110d]" />
+        Processando...
+      </>
+    ) : (
+      'Analisar PCB'
+    )}
   </button>
 </div>
         </form>
@@ -530,6 +602,32 @@ console.log(
         )}
       </section>
     </main>
+  );
+}
+
+function ProcessingStep({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-400/10">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold text-white">
+          {title}
+        </p>
+
+        <p className="mt-1 text-xs leading-5 text-white/35">
+          {description}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -681,6 +779,49 @@ function AnalysisReport({
   backPreview,
   onReset,
 }: AnalysisReportProps) {
+  const ecoScore = calculateEcoScore({
+    components: {
+      cpu: result.components.cpu,
+      fpga: result.components.fpga,
+      asic: result.components.asic,
+      bga: result.components.bga,
+      memory: result.components.memory,
+      goldFingers: result.components.gold_fingers,
+      tantalum: result.components.tantalum,
+      transformers: result.components.transformers,
+      connectors: result.components.connectors,
+      relays: result.components.relays,
+      oscillators: result.components.oscillators,
+    },
+  
+    recycling: {
+      goldPotential: result.recycling.gold,
+      silverPotential: result.recycling.silver,
+      palladiumPotential: result.recycling.palladium,
+      copperPotential: result.recycling.copper,
+      overallPotential: result.recycling.commercial_grade,
+    },
+  
+    engineering: {
+      density: result.engineering.density,
+      estimatedLayers: result.engineering.estimated_layers,
+      technology: result.engineering.technology,
+    },
+  
+    physicalState: result.engineering.condition,
+  });
+  const boardFamily = mapBoardTypeToFamily(
+    result.identification.board_type,
+    result.identification.probable_name,
+    result.identification.equipment,
+  );
+  
+  const benchmark = boardFamily
+    ? validateEcoScoreBenchmark(
+        boardFamily,
+        ecoScore.score,
+      )
+    : null;
   const components = [
     ['CPU', result.components.cpu],
     ['FPGA', result.components.fpga],
@@ -694,6 +835,47 @@ function AnalysisReport({
     ['Relés', result.components.relays],
     ['Osciladores', result.components.oscillators],
   ];
+
+  function EcoScoreMetric({
+    label,
+    value,
+    max,
+  }: {
+    label: string;
+    value: number;
+    max: number;
+  }) {
+    const percentage = Math.max(
+      0,
+      Math.min(100, (value / max) * 100),
+    );
+  
+    return (
+      <div className="rounded-xl border border-white/10 bg-black/10 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/35">
+            {label}
+          </p>
+  
+          <p className="whitespace-nowrap text-sm font-semibold text-white">
+            {value}
+            <span className="text-white/25">
+              /{max}
+            </span>
+          </p>
+        </div>
+  
+        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div
+            className="h-full rounded-full bg-emerald-400 transition-all duration-500"
+            style={{
+              width: `${percentage}%`,
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section className="overflow-hidden rounded-3xl border border-emerald-400/20 bg-white/[0.035]">
@@ -713,15 +895,25 @@ function AnalysisReport({
             </p>
           </div>
 
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-5 py-3">
-            <p className="text-xs uppercase tracking-[0.14em] text-emerald-300/70">
-              EcoScore
-            </p>
+          <div className="min-w-40 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-5 py-3">
+  <p className="text-xs uppercase tracking-[0.14em] text-emerald-300/70">
+    EcoScore
+  </p>
 
-            <p className="mt-1 text-3xl font-semibold text-emerald-300">
-              {result.recycling.eco_score}
-            </p>
-          </div>
+  <div className="mt-1 flex items-end gap-3">
+    <p className="text-3xl font-semibold text-emerald-300">
+      {ecoScore.score}
+    </p>
+
+    <span className="mb-1 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-xs font-semibold text-emerald-300">
+      Classe {ecoScore.grade}
+    </span>
+  </div>
+
+  <p className="mt-2 max-w-48 text-xs leading-5 text-white/40">
+    {ecoScore.classification}
+  </p>
+</div>
         </div>
       </div>
 
@@ -739,7 +931,7 @@ function AnalysisReport({
         />
       </div>
 
-      <ReportSection title="Identificação">
+        <ReportSection title="Identificação">
         <ReportGrid
           items={[
             ['Tipo', result.identification.board_type],
@@ -815,6 +1007,128 @@ function AnalysisReport({
           ]}
         />
       </ReportSection>
+
+      <section className="border-t border-white/10 px-6 py-8 sm:px-8">
+  <div className="flex flex-col gap-6">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300/60">
+        Composição do EcoScore
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <p className="text-3xl font-semibold text-white">
+          {ecoScore.score}
+          <span className="text-base font-medium text-white/30">
+            /100
+          </span>
+        </p>
+
+        <span className="mb-1 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs font-semibold text-emerald-300">
+          Classe {ecoScore.grade}
+        </span>
+      </div>
+
+      <p className="mt-2 text-sm text-white/45">
+        {ecoScore.classification}
+      </p>
+    </div>
+
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <EcoScoreMetric
+        label="Potencial eletrônico"
+        value={ecoScore.breakdown.electronicPotential}
+        max={35}
+      />
+
+      <EcoScoreMetric
+        label="Contatos e interfaces"
+        value={ecoScore.breakdown.contactsAndInterfaces}
+        max={20}
+      />
+
+      <EcoScoreMetric
+        label="Potencial metalúrgico"
+        value={ecoScore.breakdown.metallurgicalPotential}
+        max={30}
+      />
+
+      <EcoScoreMetric
+        label="Características da PCB"
+        value={ecoScore.breakdown.pcbCharacteristics}
+        max={15}
+      />
+    </div>
+
+    {benchmark && (
+  <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">
+          Benchmark EcoBoard
+        </p>
+
+        <p className="mt-2 text-sm font-semibold text-white">
+          {formatBenchmarkStatus(benchmark.status)}
+        </p>
+
+        <p className="mt-1 text-xs leading-5 text-white/35">
+          {benchmark.message}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-3 text-right">
+        <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-300/60">
+          Faixa de referência
+        </p>
+
+        <p className="mt-1 text-lg font-semibold text-emerald-300">
+          {benchmark.expectedMin}
+          {' – '}
+          {benchmark.expectedMax}
+        </p>
+      </div>
+    </div>
+
+    {benchmark.differenceFromRange > 0 && (
+      <p className="mt-4 border-t border-white/10 pt-4 text-xs leading-5 text-white/30">
+        Diferença em relação à faixa esperada:{' '}
+        <span className="font-semibold text-white/50">
+          {benchmark.differenceFromRange}{' '}
+          {benchmark.differenceFromRange === 1
+            ? 'ponto'
+            : 'pontos'}
+        </span>
+      </p>
+    )}
+  </div>
+)}
+
+    {ecoScore.breakdown.physicalAdjustment !== 0 && (
+      <div className="rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/40">
+              Ajuste de integridade
+            </p>
+
+            <p className="mt-1 text-xs leading-5 text-white/35">
+              Ajuste aplicado por danos, canibalização ou remoção de componentes.
+            </p>
+          </div>
+
+          <p className="text-lg font-semibold text-amber-300">
+            {ecoScore.breakdown.physicalAdjustment}
+          </p>
+        </div>
+      </div>
+    )}
+
+    <p className="text-xs leading-5 text-white/30">
+      O EcoScore representa o potencial relativo de recuperação da PCB.
+      A pontuação não corresponde diretamente ao preço de compra ou venda.
+    </p>
+  </div>
+</section>
 
       <ReportSection title="Parecer da EcoBoard">
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-5">
@@ -902,6 +1216,8 @@ function formatPotential(value: string): string {
 
   return values[value] ?? value;
 }
+
+
 
 function formatDecision(value: string): string {
   const values: Record<string, string> = {
