@@ -587,24 +587,47 @@ function ImageUploadCard({
 
       {!image ? (
         <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.025] px-5 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10 text-2xl text-emerald-300">
-            +
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-400/10">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-7 w-7 text-emerald-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              aria-hidden="true"
+            >
+              <path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
           </div>
 
-          <label className="mt-5 cursor-pointer rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
-            Selecionar imagem
+          <h3 className="mt-5 text-lg font-semibold">
+            Fotografar placa
+          </h3>
+
+          <p className="mt-2 max-w-sm text-sm leading-6 text-white/40">
+            Use a câmera traseira e fotografe toda a face da PCB.
+          </p>
+
+          <label className="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
+            <span aria-hidden="true">📷</span>
+            Tirar foto
 
             <input
               type="file"
-              accept="image/png,image/jpeg,image/webp"
+              accept="image/*"
+              capture="environment"
               className="hidden"
               onChange={(event) => onChange(event, side)}
             />
           </label>
 
-          <p className="mt-4 text-xs text-white/25">
-            JPG, PNG ou WEBP. Limite: 10 MB.
-          </p>
+          <div className="mt-5 max-w-sm rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+            <p className="text-xs leading-5 text-white/35">
+              Mantenha a placa inteira no enquadramento, evite reflexos e
+              fotografe perpendicularmente à superfície.
+            </p>
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
@@ -617,21 +640,30 @@ function ImageUploadCard({
           </div>
 
           <div className="border-t border-white/10 p-4">
-            <p className="truncate text-sm font-medium">
-              {image.file.name}
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {title}
+                </p>
 
-            <p className="mt-1 text-xs text-white/35">
-              {(image.file.size / 1024 / 1024).toFixed(2)} MB
-            </p>
+                <p className="mt-1 text-xs text-white/35">
+                  {(image.file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                Foto pronta
+              </span>
+            </div>
 
             <div className="mt-4 flex flex-wrap gap-3">
-              <label className="cursor-pointer rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold text-white/60 hover:text-white">
-                Trocar
+              <label className="cursor-pointer rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-400/10">
+                📷 Tirar novamente
 
                 <input
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept="image/*"
+                  capture="environment"
                   className="hidden"
                   onChange={(event) => onChange(event, side)}
                 />
@@ -640,7 +672,7 @@ function ImageUploadCard({
               <button
                 type="button"
                 onClick={() => onRemove(side)}
-                className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-xs font-semibold text-red-300"
+                className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-400/10"
               >
                 Remover
               </button>
