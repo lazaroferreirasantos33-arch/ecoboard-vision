@@ -200,6 +200,81 @@ export default function AnalysisPage() {
     setError('');
   }
 
+  async function compressImage(
+    file: File,
+    maxWidth = 1600,
+    maxHeight = 1600,
+    quality = 0.82,
+  ): Promise<File> {
+    const imageBitmap = await createImageBitmap(file);
+  
+    const scale = Math.min(
+      1,
+      maxWidth / imageBitmap.width,
+      maxHeight / imageBitmap.height,
+    );
+  
+    const width = Math.round(imageBitmap.width * scale);
+    const height = Math.round(imageBitmap.height * scale);
+  
+    const canvas = document.createElement('canvas');
+  
+    canvas.width = width;
+    canvas.height = height;
+  
+    const context = canvas.getContext('2d');
+  
+    if (!context) {
+      throw new Error(
+        'Não foi possível preparar a imagem para análise.',
+      );
+    }
+  
+    context.drawImage(
+      imageBitmap,
+      0,
+      0,
+      width,
+      height,
+    );
+  
+    imageBitmap.close();
+  
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) => {
+          if (!result) {
+            reject(
+              new Error(
+                'Não foi possível comprimir a fotografia.',
+              ),
+            );
+  
+            return;
+          }
+  
+          resolve(result);
+        },
+        'image/jpeg',
+        quality,
+      );
+    });
+  
+    const originalName = file.name.replace(
+      /\.[^/.]+$/,
+      '',
+    );
+  
+    return new File(
+      [blob],
+      `${originalName}-optimized.jpg`,
+      {
+        type: 'image/jpeg',
+        lastModified: Date.now(),
+      },
+    );
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -220,8 +295,35 @@ export default function AnalysisPage() {
     try {
       const formData = new FormData(event.currentTarget);
 
-      formData.set('frontImage', frontImage.file);
-      formData.set('backImage', backImage.file);
+const [optimizedFrontImage, optimizedBackImage] =
+  await Promise.all([
+    compressImage(frontImage.file),
+    compressImage(backImage.file),
+  ]);
+
+console.log(
+  'Frente:',
+  `${(frontImage.file.size / 1024 / 1024).toFixed(2)} MB`,
+  '→',
+  `${(optimizedFrontImage.size / 1024 / 1024).toFixed(2)} MB`,
+);
+
+console.log(
+  'Verso:',
+  `${(backImage.file.size / 1024 / 1024).toFixed(2)} MB`,
+  '→',
+  `${(optimizedBackImage.size / 1024 / 1024).toFixed(2)} MB`,
+);
+
+formData.set(
+  'frontImage',
+  optimizedFrontImage,
+);
+
+formData.set(
+  'backImage',
+  optimizedBackImage,
+);
 
       const response = await fetch('/api/analyze', {
         method: 'POST',
