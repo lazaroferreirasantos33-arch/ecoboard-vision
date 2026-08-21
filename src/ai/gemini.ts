@@ -40,15 +40,15 @@ export async function analyzePCB({
 
   const contextText = buildContextText(context);
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3.6-flash',
+  const geminiStart = performance.now();
 
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: `
+  const requestConfig = {
+  contents: [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: `
 As duas imagens abaixo pertencem à mesma placa eletrônica.
 
 Imagem 1: frente da placa.
@@ -82,31 +82,96 @@ Regras:
 - retorne somente os campos previstos no schema.
 
 ${contextText}
-            `.trim(),
+          `.trim(),
+        },
+        {
+          inlineData: {
+            mimeType: frontImage.mimeType,
+            data: frontImage.base64,
           },
-          {
-            inlineData: {
-              mimeType: frontImage.mimeType,
-              data: frontImage.base64,
-            },
+        },
+        {
+          inlineData: {
+            mimeType: backImage.mimeType,
+            data: backImage.base64,
           },
-          {
-            inlineData: {
-              mimeType: backImage.mimeType,
-              data: backImage.base64,
-            },
-          },
-        ],
-      },
-    ],
-
-    config: {
-      systemInstruction: PCB_SYSTEM_PROMPT,
-      responseMimeType: 'application/json',
-      responseSchema: PCB_ANALYSIS_SCHEMA,
-      temperature: 0.1,
+        },
+      ],
     },
+  ],
+
+  config: {
+    systemInstruction: PCB_SYSTEM_PROMPT,
+    responseMimeType: 'application/json',
+    ...(USE_SCHEMA_BENCHMARK
+      ? { responseSchema: PCB_ANALYSIS_SCHEMA, }
+      : {}),
+    thinkingConfig: {
+      thinkingLevel: 'low',
+    },
+  },
+};
+
+let response;
+
+try {
+  const primaryStart = performance.now();
+
+  try {
+    response = await ai.models.generateContent({
+        model: 'gemini-3.7-flash',
+        ...requestConfig,
+      
+        config: {
+          ...requestConfig.config,
+      
+          httpOptions: {
+            timeout: 8000,
+          },
+        },
+      });
+
+    console.log(
+      'ECOBOARD_PRIMARY_TIME:',
+      `${((performance.now() - primaryStart) / 1000).toFixed(2)}s`,
+    );
+  } catch (error) {
+    console.warn(
+      'ECOBOARD_PRIMARY_FAILED_TIME:',
+      `${((performance.now() - primaryStart) / 1000).toFixed(2)}s`,
+    );
+
+    throw error;
+  }
+} catch (error) {
+  if (!isTemporaryGeminiError(error)) {
+    throw error;
+  }
+
+  console.warn(
+    'ECOBOARD_GEMINI_FALLBACK:',
+    'Gemini 3.7 Flash indisponível. Usando Gemini 3.5 Flash-Lite.',
+  );
+
+  const fallbackStart = performance.now();
+
+  response = await ai.models.generateContent({
+    model: 'gemini-3.5-flash-lite',
+    ...requestConfig,
   });
+
+  console.log(
+    'ECOBOARD_FALLBACK_TIME:',
+    `${((performance.now() - fallbackStart) / 1000).toFixed(2)}s`,
+  );
+}
+
+  const geminiEnd = performance.now();
+
+  console.log(
+    'ECOBOARD_GEMINI_TIME:',
+    `${((geminiEnd - geminiStart) / 1000).toFixed(2)}s`,
+  );
 
   if (!response.text) {
     throw new Error(
@@ -151,3 +216,24 @@ Contexto adicional informado pelo usuário:
 ${values.map((value) => `- ${value}`).join('\n')}
   `.trim();
 }
+
+function isTemporaryGeminiError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+  
+    const message = error.message.toLowerCase();
+  
+    return (
+      message.includes('503') ||
+      message.includes('unavailable') ||
+      message.includes('high demand') ||
+      message.includes('overloaded') ||
+      message.includes('timeout') ||
+      message.includes('timed out') ||
+      message.includes('deadline') ||
+      message.includes('aborted') ||
+      error.name === 'AbortError'
+    );
+  }
+  
