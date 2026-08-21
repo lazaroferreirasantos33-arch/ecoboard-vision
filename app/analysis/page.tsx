@@ -87,19 +87,7 @@ export default function AnalysisPage() {
 
   const resultRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    return () => {
-      if (frontImage) {
-        URL.revokeObjectURL(frontImage.previewUrl);
-      }
-
-      if (backImage) {
-        URL.revokeObjectURL(backImage.previewUrl);
-      }
-    };
-  }, [frontImage, backImage]);
-
-  useEffect(() => {
+    useEffect(() => {
     if (!result) {
       return;
     }
@@ -264,6 +252,21 @@ export default function AnalysisPage() {
       /\.[^/.]+$/,
       '',
     );
+
+    const optimizedFile = new File(
+      [blob],
+      `${originalName}-optimized.jpg`,
+      {
+        type: 'image/jpeg',
+        lastModified: Date.now(),
+      },
+    );
+
+    if (optimizedFile.size >= file.size) {
+      return file;
+    }
+    
+    return optimizedFile;
   
     return new File(
       [blob],
@@ -291,15 +294,25 @@ export default function AnalysisPage() {
     setError('');
     setResult(null);
     setIsSubmitting(true);
+    const totalStart = performance.now();
 
     try {
       const formData = new FormData(event.currentTarget);
+
+      const compressionStart = performance.now();
 
 const [optimizedFrontImage, optimizedBackImage] =
   await Promise.all([
     compressImage(frontImage.file),
     compressImage(backImage.file),
   ]);
+
+  const compressionEnd = performance.now();
+
+console.log(
+  'Tempo compressão:',
+  `${((compressionEnd - compressionStart) / 1000).toFixed(2)}s`,
+);
 
 console.log(
   'Frente:',
@@ -325,10 +338,19 @@ formData.set(
   optimizedBackImage,
 );
 
+const requestStart = performance.now();
+
       const response = await fetch('/api/analyze', {
         method: 'POST',
         body: formData,
       });
+
+      const requestEnd = performance.now();
+
+console.log(
+  'Tempo API:',
+  `${((requestEnd - requestStart) / 1000).toFixed(2)}s`,
+);
 
       const responseText = await response.text();
 
@@ -359,6 +381,13 @@ if (!apiResult.data) {
 }
 
 setResult(apiResult.data);
+
+const totalEnd = performance.now();
+
+console.log(
+  'Tempo total:',
+  `${((totalEnd - totalStart) / 1000).toFixed(2)}s`,
+);
 
       if (!response.ok || !apiResult.success) {
         throw new Error(
@@ -476,164 +505,17 @@ setResult(apiResult.data);
             </div>
           )}
 
-          <section className="grid gap-5 rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:grid-cols-2 sm:p-8">
-            <div>
-              <label
-                htmlFor="weight"
-                className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
-              >
-                Peso da placa
-              </label>
-
-              <div className="mt-2 flex overflow-hidden rounded-xl border border-white/10 bg-black/20 focus-within:border-emerald-400/50">
-                <input
-                  id="weight"
-                  name="weight"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  inputMode="decimal"
-                  placeholder="0,000"
-                  className="min-w-0 flex-1 bg-transparent px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/20"
-                />
-
-                <span className="flex items-center border-l border-white/10 px-4 text-sm text-white/35">
-                  kg
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="quantity"
-                className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
-              >
-                Quantidade
-              </label>
-
-              <input
-                id="quantity"
-                name="quantity"
-                type="number"
-                min="1"
-                defaultValue="1"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none focus:border-emerald-400/50"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="origin"
-                className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
-              >
-                Origem do equipamento
-              </label>
-
-              <select
-                id="origin"
-                name="origin"
-                defaultValue=""
-                className="mt-2 w-full rounded-xl border border-white/10 bg-[#0b1711] px-4 py-3.5 text-sm text-white outline-none focus:border-emerald-400/50"
-              >
-                <option value="" disabled>
-                  Selecione uma origem
-                </option>
-
-                <option value="telecom">
-                  Telecomunicações
-                </option>
-
-                <option value="server">
-                  Servidor
-                </option>
-
-                <option value="industrial">
-                  Equipamento industrial
-                </option>
-
-                <option value="medical">
-                  Equipamento médico
-                </option>
-
-                <option value="desktop">
-                  Computador desktop
-                </option>
-
-                <option value="laptop">
-                  Notebook
-                </option>
-
-                <option value="automotive">
-                  Equipamento automotivo
-                </option>
-
-                <option value="tv">
-                  TV ou monitor
-                </option>
-
-                <option value="appliance">
-                  Eletrodoméstico
-                </option>
-
-                <option value="unknown">
-                  Origem desconhecida
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="reference"
-                className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
-              >
-                Código, modelo ou referência
-              </label>
-
-              <input
-                id="reference"
-                name="reference"
-                type="text"
-                placeholder="Ex.: WS-X6748, PCA-12345, REV B"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/20 focus:border-emerald-400/50"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label
-                htmlFor="notes"
-                className="text-xs font-medium uppercase tracking-[0.16em] text-white/40"
-              >
-                Observações
-              </label>
-
-              <textarea
-                id="notes"
-                name="notes"
-                rows={4}
-                placeholder="Informe procedência, danos, componentes removidos ou outras informações relevantes."
-                className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm leading-6 text-white outline-none placeholder:text-white/20 focus:border-emerald-400/50"
-              />
-            </div>
-          </section>
-
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center rounded-xl border border-white/10 px-6 py-3.5 text-sm font-semibold text-white/60 transition hover:border-white/20 hover:text-white"
-            >
-              Cancelar
-            </Link>
-
-            <button
-              type="submit"
-              disabled={!canSubmit}
-              className="inline-flex items-center justify-center rounded-xl bg-emerald-400 px-7 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isSubmitting
-                ? 'Analisando frente e verso...'
-                : 'Analisar placa'}
-            </button>
-          </div>
+<div className="flex justify-end">
+  <button
+    type="submit"
+    disabled={!canSubmit}
+    className="inline-flex w-full items-center justify-center rounded-xl bg-emerald-400 px-7 py-4 text-base font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-56"
+  >
+    {isSubmitting
+      ? 'Analisando PCB...'
+      : 'Analisar PCB'}
+  </button>
+</div>
         </form>
 
         {result && (
