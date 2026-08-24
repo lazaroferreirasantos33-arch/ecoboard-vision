@@ -85,17 +85,39 @@ export const PCB_ANALYSIS_SCHEMA = {
     components: {
       type: Type.OBJECT,
       properties: {
-        cpu: { type: Type.INTEGER },
-        fpga: { type: Type.INTEGER },
-        asic: { type: Type.INTEGER },
-        bga: { type: Type.INTEGER },
-        memory: { type: Type.INTEGER },
-        gold_fingers: { type: Type.INTEGER },
-        tantalum: { type: Type.INTEGER },
-        transformers: { type: Type.INTEGER },
-        connectors: { type: Type.INTEGER },
-        relays: { type: Type.INTEGER },
-        oscillators: { type: Type.INTEGER },
+        cpu: {
+          type: Type.INTEGER,
+        },
+        fpga: {
+          type: Type.INTEGER,
+        },
+        asic: {
+          type: Type.INTEGER,
+        },
+        bga: {
+          type: Type.INTEGER,
+        },
+        memory: {
+          type: Type.INTEGER,
+        },
+        gold_fingers: {
+          type: Type.INTEGER,
+        },
+        tantalum: {
+          type: Type.INTEGER,
+        },
+        transformers: {
+          type: Type.INTEGER,
+        },
+        connectors: {
+          type: Type.INTEGER,
+        },
+        relays: {
+          type: Type.INTEGER,
+        },
+        oscillators: {
+          type: Type.INTEGER,
+        },
       },
       required: [
         'cpu',
@@ -109,6 +131,55 @@ export const PCB_ANALYSIS_SCHEMA = {
         'connectors',
         'relays',
         'oscillators',
+      ],
+    },
+
+    commercial_classification: {
+      type: Type.OBJECT,
+
+      properties: {
+        category: {
+          type: Type.STRING,
+
+          enum: [
+            'INTERMEDIARIA_D',
+            'INTERMEDIARIA_D_MENOS',
+            'MAE_B',
+            'MAE_C',
+            'MAE_D',
+            'PONTEIRA_B',
+            'PLACA_HD',
+            'NAO_CLASSIFICADA',
+          ],
+        },
+
+        confidence: {
+          type: Type.NUMBER,
+        },
+
+        visual_evidence: {
+          type: Type.ARRAY,
+
+          items: {
+            type: Type.STRING,
+          },
+        },
+
+        reason: {
+          type: Type.STRING,
+        },
+
+        human_review_required: {
+          type: Type.BOOLEAN,
+        },
+      },
+
+      required: [
+        'category',
+        'confidence',
+        'visual_evidence',
+        'reason',
+        'human_review_required',
       ],
     },
 
@@ -166,6 +237,7 @@ export const PCB_ANALYSIS_SCHEMA = {
     'identification',
     'engineering',
     'components',
+    'commercial_classification',
     'recycling',
     'recommendation',
   ],

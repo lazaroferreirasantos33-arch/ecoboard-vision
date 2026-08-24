@@ -27,46 +27,17 @@ const capabilities = [
   },
 ];
 
-const metrics = [
-  {
-    value: 'Visão computacional',
-    label: 'Análise visual assistida',
-  },
-  {
-    value: 'JSON estruturado',
-    label: 'Dados técnicos padronizados',
-  },
-  {
-    value: 'Análise frente e verso',
-    label: 'Leitura conjunta da PCB',
-  },
-];
-
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#07110d] text-white">
       <header className="border-b border-white/10">
         <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="flex items-center gap-3"
+          >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-400/30 bg-emerald-400/10">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-5 w-5 text-emerald-400"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                aria-hidden="true"
-              >
-                <path d="M8 3v4M16 3v4M8 17v4M16 17v4M3 8h4M17 8h4M3 16h4M17 16h4" />
-                <rect
-                  x="7"
-                  y="7"
-                  width="10"
-                  height="10"
-                  rx="2"
-                />
-                <path d="M10 10h4v4h-4z" />
-              </svg>
+              <EcoBoardIcon className="h-5 w-5" />
             </div>
 
             <div>
@@ -109,53 +80,39 @@ export default function Home() {
         id="plataforma"
         className="relative overflow-hidden border-b border-white/10"
       >
-        <div className="pointer-events-none absolute left-1/2 top-20 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/10 blur-[140px]" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/[0.08] blur-[150px]" />
 
-        <div className="relative mx-auto flex max-w-7xl justify-center px-6 py-24 lg:px-8 lg:py-32">
-          <div className="w-full max-w-5xl text-center">
-            <div className="mx-auto mb-8 inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/5 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-emerald-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
-              Inteligência para reciclagem eletrônica
+        <div className="relative mx-auto flex min-h-[calc(100vh-5rem)] max-w-7xl items-center justify-center px-6 py-20 lg:px-8">
+          <div className="flex w-full max-w-5xl flex-col items-center text-center">
+            <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] border border-emerald-400/40 bg-emerald-400/[0.06] shadow-[0_0_60px_rgba(52,211,153,0.08)] sm:h-32 sm:w-32">
+              <EcoBoardIcon className="h-14 w-14 sm:h-16 sm:w-16" />
             </div>
 
-            <h1 className="mx-auto max-w-4xl text-5xl font-semibold leading-[1.02] tracking-[-0.05em] sm:text-6xl lg:text-7xl">
-              Transforme placas eletrônicas em{' '}
-              <span className="text-emerald-400">
-                decisões comerciais.
-              </span>
+            <h1 className="mt-8 text-4xl font-semibold tracking-[0.22em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
+              ECOBOARD
             </h1>
 
-            <p className="mx-auto mt-7 max-w-2xl text-base leading-8 text-white/55 sm:text-lg">
-              Classifique PCBs, identifique componentes estratégicos,
-              avalie integridade e compreenda o potencial técnico de
-              placas eletrônicas para reciclagem com inteligência
-              artificial.
-            </p>
+            <div className="mt-6 flex w-full max-w-3xl items-center justify-center gap-4 sm:gap-6">
+              <span className="hidden h-px flex-1 bg-gradient-to-r from-transparent to-emerald-400/40 sm:block" />
 
-            <div className="mt-10 flex justify-center">
+              <p className="whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.28em] text-emerald-400 sm:text-sm md:text-base">
+                Inteligência em Reciclagem
+              </p>
+
+              <span className="hidden h-px flex-1 bg-gradient-to-l from-transparent to-emerald-400/40 sm:block" />
+            </div>
+
+            <div className="mt-12">
               <Link
                 href="/analysis"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300"
+                className="inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-400 px-7 py-4 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300"
               >
                 Analisar uma placa
 
-                <span aria-hidden="true">→</span>
+                <span aria-hidden="true">
+                  →
+                </span>
               </Link>
-            </div>
-
-            <div className="mx-auto mt-14 grid max-w-3xl gap-6 border-t border-white/10 pt-8 sm:grid-cols-3">
-              {metrics.map((metric) => (
-                <div key={metric.value}>
-                  <p className="text-sm font-semibold text-white">
-                    {metric.value}
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-white/40">
-                    {metric.label}
-                  </p>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -185,24 +142,28 @@ export default function Home() {
             </div>
 
             <div className="grid gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/10 sm:grid-cols-2">
-              {capabilities.map((capability) => (
-                <article
-                  key={capability.number}
-                  className="bg-[#0b1811] p-7 transition hover:bg-[#0e1d15]"
-                >
-                  <p className="text-xs font-medium text-emerald-400">
-                    {capability.number}
-                  </p>
+              {capabilities.map(
+                (capability) => (
+                  <article
+                    key={capability.number}
+                    className="bg-[#0b1811] p-7 transition hover:bg-[#0e1d15]"
+                  >
+                    <p className="text-xs font-medium text-emerald-400">
+                      {capability.number}
+                    </p>
 
-                  <h3 className="mt-8 text-xl font-semibold">
-                    {capability.title}
-                  </h3>
+                    <h3 className="mt-8 text-xl font-semibold">
+                      {capability.title}
+                    </h3>
 
-                  <p className="mt-3 text-sm leading-7 text-white/45">
-                    {capability.description}
-                  </p>
-                </article>
-              ))}
+                    <p className="mt-3 text-sm leading-7 text-white/45">
+                      {
+                        capability.description
+                      }
+                    </p>
+                  </article>
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -246,7 +207,9 @@ export default function Home() {
 
       <footer className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between lg:px-8">
-          <p>© 2026 EcoBoard.</p>
+          <p>
+            © 2026 EcoBoard.
+          </p>
 
           <p>
             Inteligência em reciclagem e classificação de placas
@@ -255,5 +218,36 @@ export default function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function EcoBoardIcon({
+  className = '',
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`text-emerald-400 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3v4M16 3v4M8 17v4M16 17v4M3 8h4M17 8h4M3 16h4M17 16h4" />
+
+      <rect
+        x="7"
+        y="7"
+        width="10"
+        height="10"
+        rx="2"
+      />
+
+      <path d="M10 10h4v4h-4z" />
+    </svg>
   );
 }
