@@ -1,4 +1,7 @@
-import { GoogleGenAI } from '@google/genai';
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+} from '@google/genai';
 import { PCB_SYSTEM_PROMPT } from './prompts';
 import { PCB_ANALYSIS_SCHEMA } from './schemas';
 
@@ -275,7 +278,7 @@ ${contextText}
     responseMimeType: 'application/json',
     responseSchema: PCB_ANALYSIS_SCHEMA,
     thinkingConfig: {
-      thinkingLevel: 'low' as const,
+      thinkingLevel: ThinkingLevel.LOW,
     },
   };
 
