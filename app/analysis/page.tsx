@@ -15,9 +15,11 @@ import {
   validateEcoScoreBenchmark,
 } from '@/src/ecoboard/benchmark';
 import { classifyCommerciallyV2 } from '@/src/ecoboard/commercial-classification-v2';
+import { getSupabaseClient } from '@/src/lib/supabase';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const PILOT_OPERATOR_STORAGE_KEY = 'ecoboard-pilot-operator';
 
 type ImageSide = 'front' | 'back';
 
@@ -99,8 +101,51 @@ export default function AnalysisPage() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [analyzedFrontFile, setAnalyzedFrontFile] = useState<File | null>(null);
+  const [analyzedBackFile, setAnalyzedBackFile] = useState<File | null>(null);
+  const [operatorName, setOperatorName] = useState('');
+  const [operatorInput, setOperatorInput] = useState('');
+  const [operatorLoaded, setOperatorLoaded] = useState(false);
 
   const resultRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const savedOperator = window.localStorage
+      .getItem(PILOT_OPERATOR_STORAGE_KEY)
+      ?.trim();
+
+    if (savedOperator) {
+      setOperatorName(savedOperator);
+      setOperatorInput(savedOperator);
+    }
+
+    setOperatorLoaded(true);
+  }, []);
+
+  function startPilotSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const normalizedName = operatorInput.trim();
+
+    if (!normalizedName) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      PILOT_OPERATOR_STORAGE_KEY,
+      normalizedName,
+    );
+
+    setOperatorName(normalizedName);
+  }
+
+  function changeOperator() {
+    window.localStorage.removeItem(PILOT_OPERATOR_STORAGE_KEY);
+    setOperatorName('');
+    setOperatorInput('');
+    setResult(null);
+    setError('');
+  }
 
     useEffect(() => {
     if (!result) {
@@ -166,6 +211,8 @@ export default function AnalysisPage() {
     }
 
     setResult(null);
+    setAnalyzedFrontFile(null);
+    setAnalyzedBackFile(null);
     setError('');
   }
 
@@ -185,6 +232,8 @@ export default function AnalysisPage() {
     }
 
     setResult(null);
+    setAnalyzedFrontFile(null);
+    setAnalyzedBackFile(null);
     setError('');
   }
 
@@ -200,6 +249,8 @@ export default function AnalysisPage() {
     setFrontImage(null);
     setBackImage(null);
     setResult(null);
+    setAnalyzedFrontFile(null);
+    setAnalyzedBackFile(null);
     setError('');
   }
 
@@ -299,6 +350,8 @@ export default function AnalysisPage() {
 
     setError('');
     setResult(null);
+    setAnalyzedFrontFile(null);
+    setAnalyzedBackFile(null);
     setIsSubmitting(true);
 
     const totalStart = performance.now();
@@ -312,6 +365,9 @@ export default function AnalysisPage() {
           compressImage(frontImage.file),
           compressImage(backImage.file),
         ]);
+
+      setAnalyzedFrontFile(optimizedFrontImage);
+      setAnalyzedBackFile(optimizedBackImage);
 
       const compressionEnd = performance.now();
 
@@ -406,6 +462,67 @@ export default function AnalysisPage() {
     Boolean(backImage) &&
     !isSubmitting;
 
+  if (!operatorLoaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#07110d] px-6 text-white">
+        <p className="text-sm text-white/45">
+          Preparando sessão de testes...
+        </p>
+      </main>
+    );
+  }
+
+  if (!operatorName) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#07110d] px-6 py-12 text-white">
+        <section className="w-full max-w-xl rounded-3xl border border-emerald-400/20 bg-white/[0.035] p-6 sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
+            EcoBoard Pilot
+          </p>
+
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.03em]">
+            Identificação do operador
+          </h1>
+
+          <p className="mt-3 text-sm leading-7 text-white/45">
+            Informe quem realizará esta bateria de testes. O nome será
+            associado às validações registradas no piloto.
+          </p>
+
+          <form className="mt-7 grid gap-4" onSubmit={startPilotSession}>
+            <div>
+              <label
+                htmlFor="operator-name"
+                className="text-xs font-semibold uppercase tracking-[0.14em] text-white/40"
+              >
+                Nome do operador
+              </label>
+
+              <input
+                id="operator-name"
+                type="text"
+                autoComplete="name"
+                autoFocus
+                value={operatorInput}
+                onChange={(event) => setOperatorInput(event.target.value)}
+                placeholder="Digite seu nome"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-emerald-400/40"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!operatorInput.trim()}
+              className="mt-2 inline-flex items-center justify-center rounded-xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Iniciar sessão de testes
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#07110d] text-white">
       <header className="border-b border-white/10">
@@ -437,12 +554,31 @@ export default function AnalysisPage() {
             </div>
           </Link>
 
-          <Link
-            href="/"
-            className="text-sm text-white/50 transition hover:text-white"
-          >
-            Voltar ao início
-          </Link>
+          <div className="flex items-center gap-4">
+            <div className="hidden text-right sm:block">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
+                Operador
+              </p>
+              <p className="mt-1 max-w-48 truncate text-xs font-semibold text-white/70">
+                {operatorName}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={changeOperator}
+              className="text-xs font-semibold text-emerald-300/70 transition hover:text-emerald-300"
+            >
+              Trocar operador
+            </button>
+
+            <Link
+              href="/"
+              className="hidden text-sm text-white/50 transition hover:text-white lg:inline"
+            >
+              Voltar ao início
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -583,6 +719,9 @@ export default function AnalysisPage() {
               result={result}
               frontPreview={frontImage?.previewUrl ?? ''}
               backPreview={backImage?.previewUrl ?? ''}
+              frontFile={analyzedFrontFile}
+              backFile={analyzedBackFile}
+              operatorName={operatorName}
               onReset={resetAnalysis}
             />
           </div>
@@ -757,6 +896,9 @@ type AnalysisReportProps = {
   result: AnalysisResult;
   frontPreview: string;
   backPreview: string;
+  frontFile: File | null;
+  backFile: File | null;
+  operatorName: string;
   onReset: () => void;
 };
 
@@ -764,8 +906,18 @@ function AnalysisReport({
   result,
   frontPreview,
   backPreview,
+  frontFile,
+  backFile,
+  operatorName,
   onReset,
 }: AnalysisReportProps) {
+  const [feedbackMode, setFeedbackMode] = useState<'idle' | 'correcting' | 'saved'>('idle');
+  const [correctedCategory, setCorrectedCategory] = useState('');
+  const [correctionNotes, setCorrectionNotes] = useState('');
+  const [feedbackError, setFeedbackError] = useState('');
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  const [analysisSessionId] = useState(() => crypto.randomUUID());
+
   const ecoScore = calculateEcoScore({
     components: {
       cpu: result.components.cpu,
@@ -902,6 +1054,112 @@ function AnalysisReport({
             .human_review_required,
       },
     });
+
+  async function saveFeedback(
+    classificationCorrect: boolean,
+  ) {
+    if (!classificationCorrect && !correctedCategory.trim()) {
+      setFeedbackError('Informe a classificação correta da placa.');
+      return;
+    }
+
+    if (!frontFile || !backFile) {
+      setFeedbackError(
+        'As imagens analisadas não estão disponíveis para salvar esta validação.',
+      );
+      return;
+    }
+
+    setFeedbackError('');
+    setIsSavingFeedback(true);
+
+    try {
+      const supabase = getSupabaseClient();
+
+      const frontPath = buildPilotImagePath(
+        analysisSessionId,
+        'front',
+        frontFile,
+      );
+
+      const backPath = buildPilotImagePath(
+        analysisSessionId,
+        'back',
+        backFile,
+      );
+
+      const [frontUpload, backUpload] = await Promise.all([
+        supabase.storage
+          .from('pilot-images')
+          .upload(frontPath, frontFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: frontFile.type,
+          }),
+
+        supabase.storage
+          .from('pilot-images')
+          .upload(backPath, backFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: backFile.type,
+          }),
+      ]);
+
+      if (frontUpload.error) {
+        throw new Error(
+          `Não foi possível salvar a foto da frente: ${frontUpload.error.message}`,
+        );
+      }
+
+      if (backUpload.error) {
+        throw new Error(
+          `Não foi possível salvar a foto do verso: ${backUpload.error.message}`,
+        );
+      }
+
+      const { error } = await supabase
+        .from('analysis_feedback')
+        .insert({
+          pilot_batch: 'demo-7d-01',
+          operator_name: operatorName,
+          analysis_session_id: analysisSessionId,
+          front_image_path: frontPath,
+          back_image_path: backPath,
+          technical_result: result,
+          original_family: commercialClassification.family,
+          original_category: commercialClassification.name,
+          technical_confidence:
+            commercialClassification.technicalConfidence <= 1
+              ? commercialClassification.technicalConfidence
+              : commercialClassification.technicalConfidence / 100,
+          commercial_confidence:
+            commercialClassification.commercialConfidence <= 1
+              ? commercialClassification.commercialConfidence
+              : commercialClassification.commercialConfidence / 100,
+          classification_correct: classificationCorrect,
+          corrected_category: classificationCorrect
+            ? null
+            : correctedCategory.trim(),
+          correction_notes: correctionNotes.trim() || null,
+          reviewed_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setFeedbackMode('saved');
+    } catch (error) {
+      setFeedbackError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível salvar a validação.',
+      );
+    } finally {
+      setIsSavingFeedback(false);
+    }
+  }
 
   const components = [
     ['CPU', result.components.cpu],
@@ -1046,6 +1304,141 @@ function AnalysisReport({
           </div>
         )}
       </ReportSection>
+
+      <section className="border-b border-white/10 p-6 sm:p-8">
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.045] p-5 sm:p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300/70">
+            Validação de campo
+          </p>
+
+          <h3 className="mt-3 text-xl font-semibold text-white">
+            Essa classificação está correta?
+          </h3>
+
+          <p className="mt-2 text-sm leading-6 text-white/45">
+            Sua validação será registrada para a calibração da EcoBoard após o período de testes.
+          </p>
+
+          <p className="mt-3 text-xs text-white/30">
+            Operador:{' '}
+            <span className="font-semibold text-white/55">
+              {operatorName}
+            </span>
+          </p>
+
+          {feedbackMode === 'saved' ? (
+            <div className="mt-5 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-4">
+              <p className="text-sm font-semibold text-emerald-300">
+                Validação registrada com sucesso.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={isSavingFeedback}
+                  onClick={() => saveFeedback(true)}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingFeedback && feedbackMode === 'idle'
+                    ? 'Salvando...'
+                    : 'Sim, está correta'}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingFeedback}
+                  onClick={() => {
+                    setFeedbackMode('correcting');
+                    setFeedbackError('');
+                  }}
+                  className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Corrigir classificação
+                </button>
+              </div>
+
+              {feedbackMode === 'correcting' && (
+                <div className="mt-5 grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-5">
+                  <div>
+                    <label
+                      htmlFor="corrected-category"
+                      className="text-xs font-semibold uppercase tracking-[0.14em] text-white/40"
+                    >
+                      Qual é a classificação correta?
+                    </label>
+
+                    <input
+                      id="corrected-category"
+                      type="text"
+                      value={correctedCategory}
+                      onChange={(event) =>
+                        setCorrectedCategory(event.target.value)
+                      }
+                      placeholder="Ex.: Notebook B, HD, Modem colorida..."
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-[#07110d] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-emerald-400/40"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="correction-notes"
+                      className="text-xs font-semibold uppercase tracking-[0.14em] text-white/40"
+                    >
+                      Observação opcional
+                    </label>
+
+                    <textarea
+                      id="correction-notes"
+                      value={correctionNotes}
+                      onChange={(event) =>
+                        setCorrectionNotes(event.target.value)
+                      }
+                      rows={3}
+                      placeholder="Informação adicional sobre a classificação, se necessário."
+                      className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-[#07110d] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/20 focus:border-emerald-400/40"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      disabled={isSavingFeedback}
+                      onClick={() => saveFeedback(false)}
+                      className="inline-flex items-center justify-center rounded-xl bg-emerald-400 px-5 py-3 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSavingFeedback
+                        ? 'Salvando...'
+                        : 'Salvar classificação correta'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSavingFeedback}
+                      onClick={() => {
+                        setFeedbackMode('idle');
+                        setCorrectedCategory('');
+                        setCorrectionNotes('');
+                        setFeedbackError('');
+                      }}
+                      className="rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-white/60 transition hover:bg-white/[0.04] hover:text-white"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {feedbackError && (
+                <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-300">
+                  {feedbackError}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
 
       <ReportSection title="Identificação">
         <ReportGrid
@@ -1264,6 +1657,28 @@ function AnalysisReport({
       </div>
     </section>
   );
+}
+
+function buildPilotImagePath(
+  analysisSessionId: string,
+  side: 'front' | 'back',
+  file: File,
+): string {
+  const extension = getImageExtension(file);
+
+  return `demo-7d-01/${analysisSessionId}/${side}.${extension}`;
+}
+
+function getImageExtension(file: File): string {
+  if (file.type === 'image/png') {
+    return 'png';
+  }
+
+  if (file.type === 'image/webp') {
+    return 'webp';
+  }
+
+  return 'jpg';
 }
 
 function CommercialInfoCard({
