@@ -810,30 +810,44 @@ function ImageUploadCard({
           </div>
 
           <h3 className="mt-5 text-lg font-semibold">
-            Fotografar placa
+            Adicionar imagem da placa
           </h3>
 
           <p className="mt-2 max-w-sm text-sm leading-6 text-white/40">
-            Use a câmera traseira e fotografe toda a face da PCB.
+            Tire uma nova foto ou escolha uma imagem já recebida no celular.
           </p>
 
-          <label className="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
-            <span aria-hidden="true">📷</span>
-            Tirar foto
+          <div className="mt-6 flex w-full max-w-sm flex-col gap-3 sm:flex-row">
+            <label className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-semibold text-[#07110d] transition hover:bg-emerald-300">
+              <span aria-hidden="true">📷</span>
+              Tirar foto
 
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(event) => onChange(event, side)}
-            />
-          </label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(event) => onChange(event, side)}
+              />
+            </label>
+
+            <label className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] px-5 py-3.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-400/10">
+              <span aria-hidden="true">🖼️</span>
+              Galeria
+
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => onChange(event, side)}
+              />
+            </label>
+          </div>
 
           <div className="mt-5 max-w-sm rounded-xl border border-white/10 bg-black/20 px-4 py-3">
             <p className="text-xs leading-5 text-white/35">
-              Mantenha a placa inteira no enquadramento, evite reflexos e
-              fotografe perpendicularmente à superfície.
+              Use uma imagem nítida, com a placa inteira no enquadramento e
+              sem reflexos fortes.
             </p>
           </div>
         </div>
@@ -872,6 +886,17 @@ function ImageUploadCard({
                   type="file"
                   accept="image/*"
                   capture="environment"
+                  className="hidden"
+                  onChange={(event) => onChange(event, side)}
+                />
+              </label>
+
+              <label className="cursor-pointer rounded-lg border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/70 transition hover:bg-white/[0.08] hover:text-white">
+                🖼️ Trocar pela galeria
+
+                <input
+                  type="file"
+                  accept="image/*"
                   className="hidden"
                   onChange={(event) => onChange(event, side)}
                 />
