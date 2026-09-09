@@ -343,11 +343,6 @@ export default function AnalysisPage() {
       return;
     }
 
-    if (!backImage) {
-      setError('Envie a fotografia do verso da placa.');
-      return;
-    }
-
     setError('');
     setResult(null);
     setAnalyzedFrontFile(null);
@@ -360,11 +355,10 @@ export default function AnalysisPage() {
       const formData = new FormData(event.currentTarget);
       const compressionStart = performance.now();
 
-      const [optimizedFrontImage, optimizedBackImage] =
-        await Promise.all([
-          compressImage(frontImage.file),
-          compressImage(backImage.file),
-        ]);
+      const optimizedFrontImage = await compressImage(frontImage.file);
+      const optimizedBackImage = backImage
+        ? await compressImage(backImage.file)
+        : null;
 
       setAnalyzedFrontFile(optimizedFrontImage);
       setAnalyzedBackFile(optimizedBackImage);
@@ -383,15 +377,24 @@ export default function AnalysisPage() {
         `${(optimizedFrontImage.size / 1024 / 1024).toFixed(2)} MB`,
       );
 
-      console.log(
-        'Verso:',
-        `${(backImage.file.size / 1024 / 1024).toFixed(2)} MB`,
-        '→',
-        `${(optimizedBackImage.size / 1024 / 1024).toFixed(2)} MB`,
-      );
+      if (backImage && optimizedBackImage) {
+        console.log(
+          'Verso:',
+          `${(backImage.file.size / 1024 / 1024).toFixed(2)} MB`,
+          '→',
+          `${(optimizedBackImage.size / 1024 / 1024).toFixed(2)} MB`,
+        );
+      } else {
+        console.log('Verso: não enviado');
+      }
 
       formData.set('frontImage', optimizedFrontImage);
-      formData.set('backImage', optimizedBackImage);
+
+      if (optimizedBackImage) {
+        formData.set('backImage', optimizedBackImage);
+      } else {
+        formData.delete('backImage');
+      }
 
       const requestStart = performance.now();
 
@@ -459,7 +462,6 @@ export default function AnalysisPage() {
 
   const canSubmit =
     Boolean(frontImage) &&
-    Boolean(backImage) &&
     !isSubmitting;
 
   if (!operatorLoaded) {
@@ -593,17 +595,17 @@ export default function AnalysisPage() {
           </h1>
 
           <p className="mt-5 max-w-3xl text-sm leading-7 text-white/45">
-            Envie fotografias nítidas da frente e do verso da mesma
-            placa. A EcoBoard tentará identificar o tipo, fabricante,
-            modelo, função, características, componentes e potencial
-            para reciclagem.
+            Envie uma fotografia nítida da frente da placa. Se tiver o verso,
+            envie também para ampliar a evidência visual. A EcoBoard tentará
+            identificar o tipo, fabricante, modelo, função, características,
+            componentes e potencial para reciclagem.
           </p>
         </div>
 
         <form className="grid gap-6" onSubmit={handleSubmit}>
           <section className="grid gap-6 lg:grid-cols-2">
             <ImageUploadCard
-              title="Frente da placa"
+              title="Frente da placa — obrigatória"
               description="Fotografe toda a face principal, incluindo componentes, etiquetas e inscrições."
               image={frontImage}
               side="front"
@@ -612,8 +614,8 @@ export default function AnalysisPage() {
             />
 
             <ImageUploadCard
-              title="Verso da placa"
-              description="Fotografe toda a face traseira, incluindo trilhas, códigos e contatos."
+              title="Verso da placa — opcional"
+              description="Se disponível, fotografe a face traseira, incluindo trilhas, códigos e contatos."
               image={backImage}
               side="back"
               onChange={handleImageChange}
@@ -661,14 +663,14 @@ export default function AnalysisPage() {
                 </h2>
 
                 <p className="mt-3 max-w-xl text-sm leading-7 text-white/45">
-                  A EcoBoard está processando as imagens da frente e do verso
+                  A EcoBoard está processando {backImage ? 'as imagens da frente e do verso' : 'a imagem da frente'}
                   para gerar uma leitura técnica estruturada da placa.
                 </p>
 
                 <div className="mt-8 grid w-full max-w-2xl gap-3 text-left sm:grid-cols-2">
                   <ProcessingStep
-                    title="Frente e verso"
-                    description="Preparando as imagens da PCB"
+                    title={backImage ? "Frente e verso" : "Frente da placa"}
+                    description={backImage ? "Preparando as imagens da PCB" : "Preparando a imagem disponível"}
                   />
 
                   <ProcessingStep
@@ -1088,9 +1090,9 @@ function AnalysisReport({
       return;
     }
 
-    if (!frontFile || !backFile) {
+    if (!frontFile) {
       setFeedbackError(
-        'As imagens analisadas não estão disponíveis para salvar esta validação.',
+        'A imagem analisada não está disponível para salvar esta validação.',
       );
       return;
     }
@@ -1107,29 +1109,31 @@ function AnalysisReport({
         frontFile,
       );
 
-      const backPath = buildPilotImagePath(
-        analysisSessionId,
-        'back',
-        backFile,
-      );
+      const backPath = backFile
+        ? buildPilotImagePath(
+            analysisSessionId,
+            'back',
+            backFile,
+          )
+        : null;
 
-      const [frontUpload, backUpload] = await Promise.all([
-        supabase.storage
-          .from('pilot-images')
-          .upload(frontPath, frontFile, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: frontFile.type,
-          }),
+      const frontUpload = await supabase.storage
+        .from('pilot-images')
+        .upload(frontPath, frontFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: frontFile.type,
+        });
 
-        supabase.storage
-          .from('pilot-images')
-          .upload(backPath, backFile, {
-            cacheControl: '3600',
-            upsert: false,
-            contentType: backFile.type,
-          }),
-      ]);
+      const backUpload = backFile && backPath
+        ? await supabase.storage
+            .from('pilot-images')
+            .upload(backPath, backFile, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: backFile.type,
+            })
+        : null;
 
       if (frontUpload.error) {
         throw new Error(
@@ -1137,7 +1141,7 @@ function AnalysisReport({
         );
       }
 
-      if (backUpload.error) {
+      if (backUpload?.error) {
         throw new Error(
           `Não foi possível salvar a foto do verso: ${backUpload.error.message}`,
         );
@@ -1247,11 +1251,19 @@ function AnalysisReport({
           className="h-72 w-full rounded-2xl border border-white/10 bg-black/20 object-contain"
         />
 
-        <img
-          src={backPreview}
-          alt="Verso analisado"
-          className="h-72 w-full rounded-2xl border border-white/10 bg-black/20 object-contain"
-        />
+        {backPreview ? (
+          <img
+            src={backPreview}
+            alt="Verso analisado"
+            className="h-72 w-full rounded-2xl border border-white/10 bg-black/20 object-contain"
+          />
+        ) : (
+          <div className="flex h-72 w-full items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 text-center">
+            <p className="text-sm leading-6 text-white/35">
+              Verso não enviado. A análise foi realizada somente com a imagem da frente.
+            </p>
+          </div>
+        )}
       </div>
 
       <ReportSection title="Classificação comercial">

@@ -20,7 +20,7 @@ type PCBAnalysisContext = {
 
 type AnalyzePCBInput = {
   frontImage: PCBImageInput;
-  backImage: PCBImageInput;
+  backImage?: PCBImageInput;
   context?: PCBAnalysisContext;
 };
 
@@ -178,18 +178,51 @@ export async function analyzePCB({
   const contextText = buildContextText(context);
   const totalStart = performance.now();
 
-  const contents = [
-    {
-      role: 'user',
-      parts: [
-        {
-          text: `
+  const imageCoverageText = backImage
+    ? `
 As duas imagens abaixo pertencem à mesma placa eletrônica.
 
 Imagem 1: frente da placa.
 Imagem 2: verso da mesma placa.
 
 Analise as duas imagens em conjunto.
+    `.trim()
+    : `
+Apenas uma imagem foi enviada para esta análise.
+
+Imagem 1: frente da placa.
+
+Analise exclusivamente as evidências visíveis na imagem da frente.
+Não presuma componentes, marcações, trilhas, contatos ou outras características existentes no verso.
+Quando a ausência do verso impedir uma conclusão segura, reduza a confiança e deixe a limitação clara nos campos permitidos pelo schema.
+    `.trim();
+
+  const imageParts = [
+    {
+      inlineData: {
+        mimeType: frontImage.mimeType,
+        data: frontImage.base64,
+      },
+    },
+    ...(backImage
+      ? [
+          {
+            inlineData: {
+              mimeType: backImage.mimeType,
+              data: backImage.base64,
+            },
+          },
+        ]
+      : []),
+  ];
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        {
+          text: `
+${imageCoverageText}
 
 OBJETIVO PRINCIPAL DA ECOBOARD:
 
@@ -233,7 +266,8 @@ REGRAS DE CLASSIFICAÇÃO COMERCIAL:
 - não invente regras comerciais;
 - não force uma classificação;
 - diferencie fatos observados de hipóteses;
-- analise sempre frente e verso como uma única PCB;
+- quando frente e verso forem enviados, analise as duas faces como uma única PCB;
+- quando somente a frente for enviada, não invente nem presuma informações do verso;
 - utilize visual_evidence para registrar apenas evidências realmente observadas;
 - reason deve explicar de forma breve por que a classificação foi escolhida;
 - confidence deve representar confiança especificamente na classificação comercial;
@@ -256,19 +290,7 @@ ${contextText}
           `.trim(),
         },
 
-        {
-          inlineData: {
-            mimeType: frontImage.mimeType,
-            data: frontImage.base64,
-          },
-        },
-
-        {
-          inlineData: {
-            mimeType: backImage.mimeType,
-            data: backImage.base64,
-          },
-        },
+        ...imageParts,
       ],
     },
   ];

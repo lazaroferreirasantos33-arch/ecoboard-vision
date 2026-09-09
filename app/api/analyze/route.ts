@@ -18,15 +18,18 @@ function getFile(
 ): File | null {
   const value = formData.get(fieldName);
 
-  return value instanceof File ? value : null;
+  return value instanceof File && value.size > 0 ? value : null;
 }
 
 function validateImage(
   file: File | null,
   label: string,
+  required: boolean,
 ): string | null {
   if (!file) {
-    return `A imagem da ${label} da placa é obrigatória.`;
+    return required
+      ? `A imagem da ${label} da placa é obrigatória.`
+      : null;
   }
 
   if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -53,7 +56,11 @@ export async function POST(request: NextRequest) {
     const frontImage = getFile(formData, 'frontImage');
     const backImage = getFile(formData, 'backImage');
 
-    const frontError = validateImage(frontImage, 'frente');
+    const frontError = validateImage(
+      frontImage,
+      'frente',
+      true,
+    );
 
     if (frontError) {
       return NextResponse.json(
@@ -65,7 +72,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const backError = validateImage(backImage, 'verso');
+    const backError = validateImage(
+      backImage,
+      'verso',
+      false,
+    );
 
     if (backError) {
       return NextResponse.json(
@@ -77,20 +88,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!frontImage || !backImage) {
+    if (!frontImage) {
       return NextResponse.json(
         {
           success: false,
-          error: 'As imagens da frente e do verso são obrigatórias.',
+          error: 'A imagem da frente da placa é obrigatória.',
         },
         { status: 400 },
       );
     }
 
-    const [frontBase64, backBase64] = await Promise.all([
-      fileToBase64(frontImage),
-      fileToBase64(backImage),
-    ]);
+    const frontBase64 = await fileToBase64(frontImage);
+    const backBase64 = backImage
+      ? await fileToBase64(backImage)
+      : null;
 
     const resultText = await analyzePCB({
       frontImage: {
@@ -98,10 +109,13 @@ export async function POST(request: NextRequest) {
         mimeType: frontImage.type,
       },
 
-      backImage: {
-        base64: backBase64,
-        mimeType: backImage.type,
-      },
+      backImage:
+        backImage && backBase64
+          ? {
+              base64: backBase64,
+              mimeType: backImage.type,
+            }
+          : undefined,
 
       context: {
         weight: String(formData.get('weight') ?? ''),
