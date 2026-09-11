@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import CatalogPanel from '@/components/catalog/catalog-panel';
 import {
   ChangeEvent,
   FormEvent,
@@ -556,7 +557,8 @@ export default function AnalysisPage() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <CatalogPanel />
             <div className="hidden text-right sm:block">
               <p className="text-[10px] uppercase tracking-[0.14em] text-white/30">
                 Operador
@@ -1207,6 +1209,7 @@ function AnalysisReport({
   return (
     <section className="overflow-hidden rounded-3xl border border-emerald-400/20 bg-white/[0.035]">
       <div className="border-b border-white/10 px-6 py-6 sm:px-8">
+        <div className="mb-4"><CatalogPanel /></div>
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
           Laudo técnico-comercial
         </p>
