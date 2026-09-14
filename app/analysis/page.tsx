@@ -1,7 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+
 import CatalogPanel from '@/components/catalog/catalog-panel';
+import ReferenceComparison from '@/components/catalog/reference-comparison';
+
 import {
   ChangeEvent,
   FormEvent,
@@ -719,6 +722,11 @@ export default function AnalysisPage() {
 
         {result && (
           <div ref={resultRef} className="scroll-mt-8 pt-10">
+            <ReferenceComparison
+  baseline={result}
+  frontFile={analyzedFrontFile}
+  backFile={analyzedBackFile}
+/>
             <AnalysisReport
               result={result}
               frontPreview={frontImage?.previewUrl ?? ''}
