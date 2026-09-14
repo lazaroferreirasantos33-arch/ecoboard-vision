@@ -1,4 +1,12 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
-
-module.exports = nextConfig;
+const nextConfig = {
+    experimental: {
+      outputFileTracingIncludes: {
+        '/api/analyze/reference-test': [
+          './public/catalog-assets/37.webp',
+        ],
+      },
+    },
+  };
+  
+  module.exports = nextConfig;
