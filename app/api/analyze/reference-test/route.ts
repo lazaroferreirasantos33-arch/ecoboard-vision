@@ -1,28 +1,29 @@
 import {
-    NextRequest,
-    NextResponse,
-  } from 'next/server';
-  
-  import {
-    readFile,
-  } from 'fs/promises';
-  
-  import {
-    createHash,
-    randomUUID,
-  } from 'crypto';
-  
-  import path from 'path';
-  
-  import {
-    analyzePCBWithMetadata,
-  } from '@/src/ai/gemini';
-  
-  import {
-    CATALOG_VERSION,
-    REFERENCE_SELECTION_VERSION,
-    selectCatalogReferences,
-  } from '@/src/ai/reference-catalog';
+  NextResponse,
+} from 'next/server';
+
+import {
+  createHash,
+  randomUUID,
+} from 'crypto';
+
+import {
+  get as httpGet,
+} from 'http';
+
+import {
+  get as httpsGet,
+} from 'https';
+
+import {
+  analyzePCBWithMetadata,
+} from '@/src/ai/gemini';
+
+import {
+  CATALOG_VERSION,
+  REFERENCE_SELECTION_VERSION,
+  selectCatalogReferences,
+} from '@/src/ai/reference-catalog';
   
   export const runtime = 'nodejs';
   export const dynamic = 'force-dynamic';
@@ -202,9 +203,92 @@ import {
   
     return parsed;
   }
+
+  function downloadReferenceAsset(
+    assetUrl: URL,
+  ): Promise<Buffer> {
+    return new Promise(
+      (resolve, reject) => {
+        const requestAsset =
+          assetUrl.protocol === 'https:'
+            ? httpsGet
+            : httpGet;
+  
+        const assetRequest =
+          requestAsset(
+            assetUrl,
+            (response) => {
+              if (
+                response.statusCode !==
+                200
+              ) {
+                response.resume();
+  
+                reject(
+                  new Error(
+                    `REFERENCE_ASSET_HTTP_${response.statusCode ?? 'UNKNOWN'}`,
+                  ),
+                );
+  
+                return;
+              }
+  
+              const chunks: Buffer[] =
+                [];
+  
+              let totalSize = 0;
+  
+              response.on(
+                'data',
+                (chunk: Buffer) => {
+                  totalSize +=
+                    chunk.length;
+  
+                  if (
+                    totalSize >
+                    2 * 1024 * 1024
+                  ) {
+                    response.destroy(
+                      new Error(
+                        'REFERENCE_ASSET_TOO_LARGE',
+                      ),
+                    );
+  
+                    return;
+                  }
+  
+                  chunks.push(chunk);
+                },
+              );
+  
+              response.on(
+                'end',
+                () => {
+                  resolve(
+                    Buffer.concat(
+                      chunks,
+                    ),
+                  );
+                },
+              );
+  
+              response.on(
+                'error',
+                reject,
+              );
+            },
+          );
+  
+        assetRequest.on(
+          'error',
+          reject,
+        );
+      },
+    );
+  }
   
   export async function POST(
-    request: NextRequest,
+    request: Request,
   ) {
     const totalStart =
       performance.now();
@@ -393,88 +477,86 @@ import {
       }
   
       const referenceImages =
-        await Promise.all(
-          selectedReferences
-            .slice(0, 2)
-            .map(
-              async (
-                reference,
-              ) => {
-                /*
-                 * O caminho vem somente da
-                 * definição interna.
-                 * Nenhum caminho enviado pelo
-                 * navegador é utilizado.
-                 */
-                const absolutePath =
-                  path.join(
-                    process.cwd(),
-                    reference.assetPath,
-                  );
-  
-                const referenceBuffer =
-                  await readFile(
-                    absolutePath,
-                  );
-  
-                if (
-                  referenceBuffer.length ===
-                    0 ||
-                  referenceBuffer.length >
-                    2 * 1024 * 1024
-                ) {
-                  throw new Error(
-                    'REFERENCE_ASSET_INVALID',
-                  );
-                }
-  
-                const riff =
-                  referenceBuffer
-                    .subarray(0, 4)
-                    .toString('ascii');
-  
-                const webp =
-                  referenceBuffer
-                    .subarray(8, 12)
-                    .toString('ascii');
-  
-                if (
-                  riff !== 'RIFF' ||
-                  webp !== 'WEBP'
-                ) {
-                  throw new Error(
-                    'REFERENCE_ASSET_INVALID',
-                  );
-                }
-  
-                return {
-                  id: reference.id,
-                  source:
-                    reference.source,
-                  edition:
-                    reference.edition,
-                  page:
-                    reference.page,
-                  title:
-                    reference.title,
-                  codes: [
-                    ...reference.codes,
-                  ],
-                  notes: [
-                    ...reference.notes,
-                  ],
-                  mimeType:
-                    reference.mimeType,
-                  base64:
-                    referenceBuffer
-                      .toString(
-                        'base64',
-                      ),
-                };
-              },
-            ),
-        );
-  
+  await Promise.all(
+    selectedReferences
+      .slice(0, 2)
+      .map(
+        async (
+          reference,
+        ) => {
+          /*
+           * O endereço é definido
+           * internamente no catálogo.
+           * Nenhuma URL enviada pelo
+           * navegador é utilizada.
+           */
+          const assetUrl =
+            new URL(
+              reference.assetPath,
+            );
+
+          const referenceBuffer =
+            await downloadReferenceAsset(
+              assetUrl,
+            );
+
+          if (
+            referenceBuffer.length ===
+              0 ||
+            referenceBuffer.length >
+              2 * 1024 * 1024
+          ) {
+            throw new Error(
+              'REFERENCE_ASSET_INVALID',
+            );
+          }
+
+          const riff =
+            referenceBuffer
+              .subarray(0, 4)
+              .toString('ascii');
+
+          const webp =
+            referenceBuffer
+              .subarray(8, 12)
+              .toString('ascii');
+
+          if (
+            riff !== 'RIFF' ||
+            webp !== 'WEBP'
+          ) {
+            throw new Error(
+              'REFERENCE_ASSET_INVALID',
+            );
+          }
+
+          return {
+            id: reference.id,
+            source:
+              reference.source,
+            edition:
+              reference.edition,
+            page:
+              reference.page,
+            title:
+              reference.title,
+            codes: [
+              ...reference.codes,
+            ],
+            notes: [
+              ...reference.notes,
+            ],
+            mimeType:
+              reference.mimeType,
+            base64:
+              referenceBuffer
+                .toString(
+                  'base64',
+                ),
+          };
+        },
+      ),
+  );
       const analysis =
         await analyzePCBWithMetadata({
           frontImage: {

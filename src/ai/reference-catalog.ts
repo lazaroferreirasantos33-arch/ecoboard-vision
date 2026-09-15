@@ -29,7 +29,7 @@ import type {
     title: 'Placa de HD',
     codes: ['PVE0016'],
     assetPath:
-      'public/catalog-assets/37.webp',
+    'https://raw.githubusercontent.com/lazaroferreirasantos33-arch/ecoboard-vision/main/public/catalog-assets/37.webp',
     mimeType: 'image/webp',
   
     notes: [
@@ -120,6 +120,8 @@ import type {
     }
   
     const hddSignals = [
+      'pcb de hdd',
+      'pcb de hd',
       'hdd controller board',
       'hard drive pcb',
       'hard disk pcb',
